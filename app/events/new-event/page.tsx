@@ -19,7 +19,7 @@ const eventSchema = z.object({
   category: z.string().min(1, "Category is required"),
   outcome1: z.string().min(1, "Outcome 1 is required"),
   outcome2: z.string().min(1, "Outcome 2 is required"),
-  resolutionSource: z.string().url("Must be a valid URL").min(1, "Resolution source is required"),
+  resolutionSource: z.string().min(1, "Resolution source is required").max(500, "Resolution source must not exceed 500 characters"),
   resolutionDateTime: z.string().min(1, "Resolution date and time is required"),
 })
 
@@ -150,7 +150,6 @@ export default function NewEventPage() {
               </label>
               <Input
                 id="resolutionSource"
-                type="url"
                 {...register("resolutionSource")}
                 className={errors.resolutionSource ? "border-red-500" : ""}
               />
