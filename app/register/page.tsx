@@ -15,31 +15,33 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Disclosure } from "@headlessui/react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useRouter } from "next/navigation"
+import { FaGoogle, FaGithub, FaTwitter } from 'react-icons/fa';
+import { signIn } from 'next-auth/react';
+import { toast } from "sonner";
+import { Label } from "@/components/ui/label"
 
-const registrationSchema = z
-  .object({
-    email: z.string().email("Invalid email address").max(254, "Email must not exceed 254 characters"),
-    password: z
-      .string()
-      .min(12, "Password must be at least 12 characters")
-      .max(128, "Password must not exceed 128 characters")
-      .regex(/[A-Z]/, "Must contain uppercase letter")
-      .regex(/[a-z]/, "Must contain lowercase letter")
-      .regex(/[0-9]/, "Must contain number")
-      .regex(/[^A-Za-z0-9]/, "Must contain special character"),
-    confirmPassword: z.string(),
-    firstName: z.string().min(2).max(50).optional(),
-    lastName: z.string().min(2).max(50).optional(),
-    displayName: z.string().min(3).max(30).optional(),
-    phoneNumber: z.string().optional(),
-    dateOfBirth: z.string().optional(),
-    gender: z.string().optional(),
-    privacyAccepted: z.boolean()
+const registrationSchema = z.object({
+  email: z.string().email("Invalid email address"),
+  password: z.string()
+    .min(5, "Password must be at least 5 characters")
+    .regex(/[A-Z]/, "Must contain uppercase letter")
+    .regex(/[a-z]/, "Must contain lowercase letter")
+    .regex(/[0-9]/, "Must contain number")
+    .regex(/[^A-Za-z0-9]/, "Must contain special character"),
+  confirmPassword: z.string(),
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
+  displayName: z.string().optional(),
+  phoneNumber: z.string().optional(),
+  dateOfBirth: z.string().optional(),
+  gender: z.string().optional(),
+  privacyAccepted: z.boolean().refine((val) => val === true, {
+    message: "You must accept the Privacy Policy and Terms of Service"
   })
-  .refine((data) => data.password === data.confirmPassword, {
-    message: "Passwords don't match",
-    path: ["confirmPassword"],
-  })
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Passwords don't match",
+  path: ["confirmPassword"],
+});
 
 type RegistrationFormData = z.infer<typeof registrationSchema>
 
@@ -65,6 +67,9 @@ export default function RegisterPage() {
     watch,
   } = useForm<RegistrationFormData>({
     resolver: zodResolver(registrationSchema),
+    defaultValues: {
+      privacyAccepted: false
+    }
   })
 
   const password = watch("password")
@@ -74,38 +79,31 @@ export default function RegisterPage() {
     setFormError(null)
 
     try {
-      const formData = {
-        ...data,
-        privacyAccepted: Boolean(data.privacyAccepted)
-      }
-
-      const res = await fetch('/api/auth/register', {
+      const response = await fetch('/api/auth/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          email: formData.email,
-          password: formData.password,
-          firstName: formData.firstName || undefined,
-          lastName: formData.lastName || undefined,
-          displayName: formData.displayName || undefined,
-          phoneNumber: formData.phoneNumber || undefined,
-          dateOfBirth: formData.dateOfBirth || undefined,
-          gender: formData.gender || undefined
-        }),
+        body: JSON.stringify(data),
       })
 
-      const responseData = await res.json()
+      const responseData = await response.json()
 
-      if (!res.ok) {
-        throw new Error(responseData.error || 'An error occurred')
+      if (!response.ok) {
+        throw new Error(responseData.error || 'Registration failed')
       }
 
-      // Redirect to login page after successful registration
-      router.push('/login')
+      // Store token and user data
+      localStorage.setItem('token', responseData.token)
+      localStorage.setItem('userData', JSON.stringify(responseData.user))
+      
+      // Redirect to home page
+      router.push('/')
+      toast.success('Registration successful!')
+
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : 'An error occurred')
+      console.error('Registration error:', error)
+      setFormError(error instanceof Error ? error.message : 'Registration failed')
     } finally {
       setIsSubmitting(false)
     }
@@ -147,18 +145,66 @@ export default function RegisterPage() {
           <CardHeader>
             <CardTitle>Create your account</CardTitle>
             <CardDescription>
-              Fill in the required information to get started. Additional details can be added later.
+              Enter your email and create a password to get started
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {/* Add OAuth Buttons */}
+            <div className="space-y-6">
+              <div className="grid grid-cols-3 gap-4">
+                <Button 
+                  variant="outline" 
+                  className="w-full h-12 px-5 py-2 bg-white hover:bg-gray-50"
+                  onClick={() => signIn('google', { callbackUrl: '/' })}
+                  disabled={isSubmitting}
+                >
+                  <div className="flex items-center justify-center gap-3 w-full">
+                    <FaGoogle className="h-5 w-5" />
+                    <span>Google</span>
+                  </div>
+                </Button>
+                <Button 
+                  variant="outline" 
+                  className="w-full h-12 px-5 py-2 bg-white hover:bg-gray-50"
+                  onClick={() => signIn('github', { callbackUrl: '/' })}
+                  disabled={isSubmitting}
+                >
+                  <div className="flex items-center justify-center gap-3 w-full">
+                    <FaGithub className="h-5 w-5" />
+                    <span>GitHub</span>
+                  </div>
+                </Button>
+                <Button 
+                  variant="outline" 
+                  className="w-full h-12 px-5 py-2 bg-white hover:bg-gray-50"
+                  onClick={() => signIn('twitter', { callbackUrl: '/' })}
+                  disabled={isSubmitting}
+                >
+                  <div className="flex items-center justify-center gap-3 w-full">
+                    <FaTwitter className="h-5 w-5" />
+                    <span>Twitter</span>
+                  </div>
+                </Button>
+              </div>
+
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-background px-2 text-muted-foreground">
+                    OR CONTINUE WITH EMAIL
+                  </span>
+                </div>
+              </div>
+            </div>
+
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-8" suppressHydrationWarning data-testid="registration-form">
               <div className="space-y-4">
                 <h3 className="text-lg font-medium">Required Information</h3>
 
                 <div className="space-y-2">
-                  <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                    Email Address
-                  </label>
+                  <Label htmlFor="email">Email</Label>
                   <div className="mt-1 relative">
                     <Input
                       id="email"
@@ -185,9 +231,7 @@ export default function RegisterPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                    Password
-                  </label>
+                  <Label htmlFor="password">Password</Label>
                   <Input
                     id="password"
                     type="password"
@@ -223,9 +267,7 @@ export default function RegisterPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
-                    Confirm Password
-                  </label>
+                  <Label htmlFor="confirmPassword">Confirm Password</Label>
                   <Input
                     id="confirmPassword"
                     type="password"
@@ -245,91 +287,81 @@ export default function RegisterPage() {
               <Disclosure>
                 {({ open }) => (
                   <>
-                    <Disclosure.Button className="flex justify-between w-full px-4 py-2 bg-gray-50 rounded-lg">
-                      <span className="text-sm font-medium text-gray-900">Additional Information (Optional)</span>
-                      <ChevronRightIcon className={cn("h-5 w-5 text-gray-500", open && "transform rotate-90")} />
+                    <Disclosure.Button className="flex w-full justify-between rounded-lg bg-gray-50 px-4 py-2 text-left text-sm font-medium hover:bg-gray-100 focus:outline-none focus-visible:ring">
+                      <span>Additional Information (Optional)</span>
+                      <ChevronRightIcon
+                        className={`${open ? 'rotate-90 transform' : ''} h-5 w-5`}
+                      />
                     </Disclosure.Button>
+                    <Disclosure.Panel className="px-4 pt-4 pb-2 text-sm">
+                      <div className="grid gap-4">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="firstName">First Name</Label>
+                            <Input
+                              id="firstName"
+                              type="text"
+                              {...register("firstName")}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="lastName">Last Name</Label>
+                            <Input
+                              id="lastName"
+                              type="text"
+                              {...register("lastName")}
+                            />
+                          </div>
+                        </div>
 
-                    <Disclosure.Panel className="px-4 pt-4 pb-2 space-y-6">
-                      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                         <div className="space-y-2">
-                          <label htmlFor="firstName" className="block text-sm font-medium text-gray-700">
-                            First Name
-                          </label>
-                          <Input
-                            id="firstName"
-                            type="text"
-                            {...register("firstName")}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <label htmlFor="lastName" className="block text-sm font-medium text-gray-700">
-                            Last Name
-                          </label>
-                          <Input
-                            id="lastName"
-                            type="text"
-                            {...register("lastName")}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <label htmlFor="displayName" className="block text-sm font-medium text-gray-700">
-                            Display Name
-                          </label>
+                          <Label htmlFor="displayName">Display Name</Label>
                           <Input
                             id="displayName"
                             type="text"
                             {...register("displayName")}
                           />
                         </div>
-                      </div>
 
-                      <div className="space-y-4">
                         <div className="space-y-2">
-                          <label htmlFor="phoneNumber" className="block text-sm font-medium text-gray-700">
-                            Phone Number
-                          </label>
+                          <Label htmlFor="phoneNumber">Phone Number</Label>
                           <Input
                             id="phoneNumber"
                             type="tel"
                             {...register("phoneNumber")}
-                            suppressHydrationWarning
                           />
                         </div>
-                      </div>
 
-                      <div className="space-y-4">
                         <div className="space-y-2">
-                          <label htmlFor="dateOfBirth" className="block text-sm font-medium text-gray-700">
-                            Date of Birth
-                          </label>
+                          <Label htmlFor="dateOfBirth">Date of Birth</Label>
                           <Input
                             id="dateOfBirth"
                             type="date"
                             {...register("dateOfBirth")}
-                            suppressHydrationWarning
                           />
                         </div>
-                        <Select 
-                          onValueChange={(value) => {
-                            register("gender").onChange({ 
-                              target: { value, name: "gender" } 
-                            })
-                          }}
-                          value={watch("gender") || ""}
-                          suppressHydrationWarning
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select gender" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {genderOptions.map((option) => (
-                              <SelectItem key={option.value} value={option.value}>
-                                {option.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="gender">Gender</Label>
+                          <Select 
+                            onValueChange={(value) => {
+                              register("gender").onChange({ 
+                                target: { value, name: "gender" } 
+                              })
+                            }}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select gender" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {genderOptions.map((option) => (
+                                <SelectItem key={option.value} value={option.value}>
+                                  {option.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
                       </div>
                     </Disclosure.Panel>
                   </>
@@ -337,40 +369,45 @@ export default function RegisterPage() {
               </Disclosure>
 
               <div className="flex items-center space-x-2">
-                <Checkbox 
-                  id="privacyAccepted" 
+                <Checkbox
+                  id="privacyAccepted"
                   checked={watch('privacyAccepted')}
                   onCheckedChange={(checked) => {
                     register('privacyAccepted').onChange({
-                      target: { value: checked, name: 'privacyAccepted' }
-                    })
+                      target: { name: 'privacyAccepted', value: checked }
+                    });
                   }}
                 />
                 <label
                   htmlFor="privacyAccepted"
-                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                  className="text-sm text-gray-600"
                 >
-                  I agree to the{" "}
-                  <Link href="/privacy" className="text-primary hover:text-primary/90">
+                  I agree to the{' '}
+                  <Link href="/privacy" className="text-primary hover:underline">
                     Privacy Policy
-                  </Link>{" "}
-                  and{" "}
-                  <Link href="/terms" className="text-primary hover:text-primary/90">
+                  </Link>
+                  {' '}and{' '}
+                  <Link href="/terms" className="text-primary hover:underline">
                     Terms of Service
                   </Link>
                 </label>
               </div>
               {errors.privacyAccepted && (
-                <p className="mt-1 text-sm text-red-600" id="privacy-error">
+                <p className="text-sm text-red-500">
                   {errors.privacyAccepted.message}
                 </p>
               )}
 
+              {formError && (
+                <Alert variant="destructive">
+                  <AlertDescription>{formError}</AlertDescription>
+                </Alert>
+              )}
+
               <Button 
                 type="submit" 
-                className="w-full" 
+                className="w-full"
                 disabled={isSubmitting}
-                suppressHydrationWarning
               >
                 {isSubmitting ? (
                   <>
@@ -382,24 +419,14 @@ export default function RegisterPage() {
                 )}
               </Button>
             </form>
-
-            {formError && (
-              <Alert variant="destructive" className="mt-4">
-                <AlertTitle>Registration Error</AlertTitle>
-                <AlertDescription>{formError}</AlertDescription>
-              </Alert>
-            )}
           </CardContent>
-          <CardFooter className="flex flex-col items-center justify-center space-y-2">
-            <p className="text-sm text-muted-foreground">
-              Already have an account?{" "}
-              <Link href="/login" className="font-medium text-primary hover:text-primary/90">
+          <CardFooter className="flex flex-col space-y-4">
+            <div className="text-sm text-center text-muted-foreground">
+              Already have an account?{' '}
+              <Link href="/login" className="text-primary hover:underline">
                 Sign in
               </Link>
-            </p>
-            <Link href="/" className="text-sm text-primary hover:text-primary/90">
-              ← Back to main page
-            </Link>
+            </div>
           </CardFooter>
         </Card>
       </div>

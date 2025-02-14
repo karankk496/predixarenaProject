@@ -1,14 +1,47 @@
+"use client"
+
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import Link from "next/link"
 import { MoreHorizontal, Search } from "lucide-react"
+import { useEffect, useState } from "react"
+import { UserProfile } from "./components/UserProfile"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { useRouter } from "next/navigation"
+import { toast } from "sonner"
+
+interface UserData {
+  id: string;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+  displayName: string | null;
+  role: string;
+  isSuperUser: boolean;
+}
 
 export default function Page() {
+  const [userData, setUserData] = useState<UserData | null>(null);
+  const router = useRouter();
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    router.push('/login');
+    toast.success('Logged out successfully');
+  };
+
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b">
+      <header className="border-b sticky top-0 bg-white z-50">
         <div className="container flex items-center justify-between h-16">
           <div className="w-60 flex items-center pl-8">
             <Link href="/" className="text-xl font-semibold">
@@ -21,51 +54,32 @@ export default function Page() {
               <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
             </div>
           </div>
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-1">
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path
-                    d="M10 18.5C14.6944 18.5 18.5 14.6944 18.5 10C18.5 5.30558 14.6944 1.5 10 1.5C5.30558 1.5 1.5 5.30558 1.5 10C1.5 14.6944 5.30558 18.5 10 18.5Z"
-                    fill="#FF6B00"
-                    stroke="#FF6B00"
-                  />
-                  <path
-                    d="M10 4L11.7961 7.52786L15.6085 8.1459L12.8042 10.9721L13.5267 14.8541L10 13L6.47329 14.8541L7.19577 10.9721L4.39155 8.1459L8.20386 7.52786L10 4Z"
-                    fill="white"
-                  />
-                </svg>
-                <span>1</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <circle cx="10" cy="10" r="8.5" fill="#3B82F6" />
-                </svg>
-                <span>505</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path
-                    d="M10 18.5C14.6944 18.5 18.5 14.6944 18.5 10C18.5 5.30558 14.6944 1.5 10 1.5C5.30558 1.5 1.5 5.30558 1.5 10C1.5 14.6944 5.30558 18.5 10 18.5Z"
-                    fill="#EF4444"
-                    stroke="#EF4444"
-                  />
-                  <path
-                    d="M13.7 7.60001C13.3 7.20001 12.7 7.00001 12.2 7.00001H7.8C7.3 7.00001 6.8 7.20001 6.3 7.60001C5.9 8.00001 5.7 8.60001 5.7 9.10001C5.7 9.60001 5.9 10.2 6.3 10.6L9.1 13.4C9.3 13.6 9.6 13.7 9.9 13.7C10.2 13.7 10.5 13.6 10.7 13.4L13.5 10.6C13.9 10.2 14.1 9.60001 14.1 9.10001C14.3 8.60001 14.1 8.00001 13.7 7.60001Z"
-                    fill="white"
-                  />
-                </svg>
-                <span>5</span>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" asChild>
-                <Link href="/login">Log in</Link>
-              </Button>
-              <Button asChild>
-                <Link href="/register">Sign up</Link>
-              </Button>
-            </div>
+          <div className="flex items-center gap-4">
+            {userData ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" className="flex items-center gap-2">
+                    <Avatar className="h-8 w-8">
+                      <AvatarFallback>
+                        {userData.firstName?.[0]}{userData.lastName?.[0]}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span>{userData.displayName || `${userData.firstName} ${userData.lastName}`}</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleLogout}>
+                    Log out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <Link href="/login">
+                <Button variant="secondary">Sign in</Button>
+              </Link>
+            )}
           </div>
         </div>
 
@@ -96,6 +110,27 @@ export default function Page() {
           </div>
         </nav>
       </header>
+
+      {/* Add profile modal */}
+      {userData && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-background rounded-lg w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+            <div className="p-4 flex justify-between items-center border-b">
+              <h2 className="text-lg font-semibold">Profile</h2>
+              <Button 
+                variant="ghost" 
+                size="icon"
+                onClick={() => setUserData(null)}
+              >
+                ×
+              </Button>
+            </div>
+            <div className="p-4">
+              <UserProfile onClose={() => setUserData(null)} />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Content */}
       <div className="container py-6 grid grid-cols-[240px,1fr] gap-6">

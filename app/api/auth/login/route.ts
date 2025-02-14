@@ -1,65 +1,45 @@
 import { NextResponse } from 'next/server'
-import bcrypt from 'bcryptjs'
+import bcrypt from 'bcrypt'
 import jwt from 'jsonwebtoken'
 import { prisma } from '@/lib/prisma'
-
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
 
 export async function POST(req: Request) {
   try {
     const { email, password } = await req.json()
 
-    console.log('Login attempt for:', email)
-
-    // Find user by email
+    // Find user
     const user = await prisma.user.findUnique({
       where: { email }
     })
 
-    if (!user) {
-      console.log('User not found:', email)
+    if (!user || !(await bcrypt.compare(password, user.password))) {
       return NextResponse.json(
-        { error: 'Invalid email or password' },
+        { error: 'Invalid credentials' },
         { status: 401 }
       )
     }
-
-    // Verify password
-    const passwordMatch = await bcrypt.compare(password, user.password)
-
-    if (!passwordMatch) {
-      console.log('Invalid password for user:', email)
-      return NextResponse.json(
-        { error: 'Invalid email or password' },
-        { status: 401 }
-      )
-    }
-
-    console.log('Login successful for user:', email)
 
     // Generate JWT token
     const token = jwt.sign(
-      { 
-        userId: user.id, 
+      {
+        userId: user.id,
         email: user.email,
-        displayName: user.displayName 
+        role: user.role,
+        isSuperUser: user.isSuperUser,
       },
-      JWT_SECRET,
-      { expiresIn: '24h' }
+      process.env.JWT_SECRET!,
+      { expiresIn: '1h' }
     )
 
-    // Remove password from response
-    const { password: _, ...userWithoutPassword } = user
-
     return NextResponse.json({
-      message: 'Login successful',
-      user: userWithoutPassword,
-      token
+      success: true,
+      token,
     })
+
   } catch (error) {
     console.error('Login error:', error)
     return NextResponse.json(
-      { error: 'Error during login' },
+      { error: 'Login failed. Please try again.' },
       { status: 500 }
     )
   }
