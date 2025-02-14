@@ -1,16 +1,23 @@
 "use client"
 
+// React and Next.js imports
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+
+// Form and validation imports
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
+
+// UI Component imports
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
+
+// Icons
 import { Loader2 } from "lucide-react"
 
 const eventSchema = z.object({
@@ -19,7 +26,7 @@ const eventSchema = z.object({
   category: z.string().min(1, "Category is required"),
   outcome1: z.string().min(1, "Outcome 1 is required"),
   outcome2: z.string().min(1, "Outcome 2 is required"),
-  resolutionSource: z.string().url("Must be a valid URL").min(1, "Resolution source is required"),
+  resolutionSource: z.string().min(1, "Resolution source is required").max(500, "Resolution source must not exceed 500 characters"),
   resolutionDateTime: z.string().min(1, "Resolution date and time is required"),
 })
 
@@ -150,7 +157,6 @@ export default function CreateEventPage() {
               </label>
               <Input
                 id="resolutionSource"
-                type="url"
                 {...register("resolutionSource")}
                 className={errors.resolutionSource ? "border-red-500" : ""}
               />
@@ -197,4 +203,3 @@ export default function CreateEventPage() {
     </div>
   )
 }
-

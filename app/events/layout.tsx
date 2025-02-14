@@ -1,13 +1,13 @@
-import type React from "react"
+import { ReactNode } from "react"
 
 export default function EventsLayout({
   children,
 }: {
-  children: React.ReactNode
+  children: ReactNode
 }) {
   return (
-    <div className="events-layout">
-      <main>{children}</main>
+    <div className="min-h-screen bg-background">
+      {children}
     </div>
   )
 }
