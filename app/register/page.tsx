@@ -19,6 +19,7 @@ import { FaGoogle, FaGithub, FaTwitter } from 'react-icons/fa';
 import { signIn } from 'next-auth/react';
 import { toast } from "sonner";
 import { Label } from "@/components/ui/label"
+import { Snackbar } from "@mui/material"
 
 const registrationSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -58,6 +59,8 @@ export default function RegisterPage() {
   const [isValidating, setIsValidating] = useState(false)
   const [isValid, setIsValid] = useState(false)
   const [passwordStrength, setPasswordStrength] = useState<"weak" | "medium" | "strong">("weak")
+  const [openSnackbar, setOpenSnackbar] = useState(false)
+  const [snackbarMessage, setSnackbarMessage] = useState('')
   const router = useRouter()
 
   const {
@@ -87,23 +90,26 @@ export default function RegisterPage() {
         body: JSON.stringify(data),
       })
 
-      const responseData = await response.json()
+      const result = await response.json()
 
       if (!response.ok) {
-        throw new Error(responseData.error || 'Registration failed')
+        throw new Error(result.error || 'Registration failed')
       }
 
-      // Store token and user data
-      localStorage.setItem('token', responseData.token)
-      localStorage.setItem('userData', JSON.stringify(responseData.user))
+      // Show success message
+      setSnackbarMessage(`Account created successfully! Please login to continue.`)
+      setOpenSnackbar(true)
       
-      // Redirect to home page
-      router.push('/')
-      toast.success('Registration successful!')
+      // Redirect to login page after showing message
+      setTimeout(() => {
+        router.push('/login')
+      }, 2000)
 
     } catch (error) {
       console.error('Registration error:', error)
       setFormError(error instanceof Error ? error.message : 'Registration failed')
+      setSnackbarMessage(error instanceof Error ? error.message : 'Registration failed')
+      setOpenSnackbar(true)
     } finally {
       setIsSubmitting(false)
     }
@@ -430,6 +436,14 @@ export default function RegisterPage() {
           </CardFooter>
         </Card>
       </div>
+      
+      <Snackbar
+        open={openSnackbar}
+        autoHideDuration={3000}
+        onClose={() => setOpenSnackbar(false)}
+        message={snackbarMessage}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      />
     </div>
   )
 }

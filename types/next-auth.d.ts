@@ -17,6 +17,8 @@ declare module "next-auth" {
     id: string;
     role: Role;
     isSuperUser: boolean;
+    email: string;
+    name?: string | null;
   }
 }
 

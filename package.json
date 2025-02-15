@@ -10,8 +10,15 @@
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.7.4",
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.0",
     "@headlessui/react": "^1.7.18",
+<<<<<<< HEAD
     "@hookform/resolvers": "^4.0.0",
+=======
+    "@hookform/resolvers": "latest",
+    "@mui/material": "^6.4.4",
+>>>>>>> 80b0e31 (manageusers and profile section updated)
     "@prisma/client": "^6.3.1",
     "@radix-ui/react-accordion": "^1.2.2",
     "@radix-ui/react-alert-dialog": "^1.1.4",
@@ -51,6 +58,7 @@
     "date-fns": "^3.0.0",
     "embla-carousel-react": "8.5.1",
     "input-otp": "1.4.1",
+    "jose": "^5.9.6",
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.294.0",
     "next": "latest",
@@ -58,9 +66,15 @@
     "next-themes": "^0.4.4",
     "react": "latest",
     "react-day-picker": "8.10.1",
+<<<<<<< HEAD
     "react-dom": "latest",
     "react-hook-form": "^7.54.2",
     "react-hot-toast": "^2.5.1",
+=======
+    "react-dom": "^19.0.0",
+    "react-hook-form": "latest",
+    "react-hot-toast": "^2.5.2",
+>>>>>>> 80b0e31 (manageusers and profile section updated)
     "react-icons": "^5.4.0",
     "react-resizable-panels": "^2.1.7",
     "recharts": "2.15.0",

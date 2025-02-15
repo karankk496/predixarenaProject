@@ -1,45 +1,46 @@
 import { NextResponse } from 'next/server';
-import jwt from 'jsonwebtoken';
 import { prisma } from '@/lib/prisma';
-
-interface JwtPayload {
-  userId: string;
-}
 
 export async function GET(req: Request) {
   try {
-    const authHeader = req.headers.get('Authorization');
-    console.log('Authorization header:', authHeader); // Debugging line
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Invalid authorization header' }, { status: 401 });
+    // Get userId from URL params
+    const { searchParams } = new URL(req.url);
+    const userId = searchParams.get('userId');
+
+    console.log('Fetching profile for userId:', userId);
+
+    if (!userId) {
+      return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
     }
 
-    const token = authHeader.split(' ')[1];
-    console.log('Token received:', token); // Debugging line
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as JwtPayload;
-
+    // Get user data
     const user = await prisma.user.findUnique({
-      where: { id: decoded.userId },
+      where: { id: userId },
       select: {
+        id: true,
         email: true,
         firstName: true,
         lastName: true,
         displayName: true,
-        phoneNumber: true,
-        dateOfBirth: true,
-        gender: true,
         role: true,
         isSuperUser: true,
-      },
+        createdAt: true,
+        // Exclude password and other sensitive fields
+      }
     });
+
+  //  console.log('User data found:', user);
 
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    return NextResponse.json({ user });
+    return NextResponse.json(user);
   } catch (error) {
-    console.error('Error fetching user profile:', error);
-    return NextResponse.json({ error: 'Failed to fetch user profile' }, { status: 500 });
+    console.error('Profile fetch error:', error);
+    return NextResponse.json(
+      { error: 'Failed to fetch user profile' },
+      { status: 500 }
+    );
   }
 } 

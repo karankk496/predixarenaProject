@@ -11,8 +11,11 @@ export async function POST(req: Request) {
     const user = await prisma.user.findUnique({
       where: { email }
     })
+    console.log(user)
 
-    if (!user || !(await bcrypt.compare(password, user.password))) {
+    
+
+    if (!user || !await bcrypt.compare(password, user.password)) {
       return NextResponse.json(
         { error: 'Invalid credentials' },
         { status: 401 }
@@ -31,10 +34,19 @@ export async function POST(req: Request) {
       { expiresIn: '1h' }
     )
 
-    return NextResponse.json({
+    // Remove password from user data
+    const { password: _, ...userWithoutPassword } = user;
+
+    const response = NextResponse.json({
       success: true,
       token,
-    })
+      user: userWithoutPassword,
+    });
+
+    // Set authorization header
+    response.headers.set('Authorization', `Bearer ${token}`);
+
+    return response;
 
   } catch (error) {
     console.error('Login error:', error)
