@@ -271,6 +271,39 @@ export default function Page() {
 
           {/* New Event Management Links */}
           <div className="flex justify-center space-x-4">
+            {/* TODO: Authentication Required - Currently disabled for development
+                These actions should require authentication:
+                - Creating events: Requires logged-in user
+                - Approving events: Requires isSuperUser=true
+                - Voting: Requires logged-in user
+            */}
+            {/* {userData ? (
+              <>
+                <Button asChild variant="outline">
+                  <Link href="/events/create">Create New Event</Link>
+                </Button>
+                <Button asChild variant="outline">
+                  <Link href="/events/new-event">New Event (Alternative)</Link>
+                </Button>
+                <Button asChild variant="outline">
+                  <Link href="/events">View All Events</Link>
+                </Button>
+                <Button asChild variant="outline">
+                  <Link href="/vote">Vote on Predictions</Link>
+                </Button>
+                {userData.isSuperUser && (
+                  <Button asChild variant="outline">
+                    <Link href="/admin/approve-events">Approve Events</Link>
+                  </Button>
+                )}
+              </>
+            ) : (
+              <div className="text-center text-muted-foreground">
+                Please <Link href="/login" className="text-primary hover:underline">sign in</Link> to create or manage events
+              </div>
+            )} */}
+
+            {/* SECURITY WARNING: These buttons are currently accessible without authentication */}
             <Button asChild variant="outline">
               <Link href="/events/create">Create New Event</Link>
             </Button>

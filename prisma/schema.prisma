@@ -1,88 +1,103 @@
 generator client {
-  provider        = "prisma-client-js"
-  previewFeatures = ["multiSchema"]
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
-}
-
-enum Role {
-  USER
-  ADMIN
-  OPS
-  GENERAL
 }
 
 model User {
   id            String    @id @default(cuid())
   email         String    @unique
-  password      String?
-  firstName     String?
-  lastName      String?
-  displayName   String?   @unique
-  phoneNumber   String?
-  dateOfBirth   String?
-  gender        String?
-  role          Role      @default(GENERAL)
-  isSuperUser   Boolean   @default(false)
+  name          String
+  password      String
+  points        Float     @default(1000)
+  role          Role      @default(USER)
+  status        Status    @default(PENDING)
+  // avatar     String?   // Uncomment and add this if you need avatar support
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
-  emailVerified DateTime?
-  image         String?
-  accounts      Account[]
-  sessions      Session[]
-  events        Event[]
+  markets       Market[]  @relation("CreatedMarkets")
+  trades        Trade[]
 }
 
-model Account {
-  id                String  @id @default(cuid())
-  userId            String
-  type              String
-  provider          String
-  providerAccountId String
-  refresh_token     String? @db.Text
-  access_token      String? @db.Text
-  expires_at        Int?
-  token_type        String?
-  scope             String?
-  id_token          String? @db.Text
-  session_state     String?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([provider, providerAccountId])
+model Market {
+  id              String      @id @default(cuid())
+  title           String
+  description     String
+  creator         User        @relation("CreatedMarkets", fields: [creatorId], references: [id])
+  creatorId       String
+  category        String
+  status          String      // DRAFT, PENDING, ACTIVE, RESOLVED, CANCELLED
+  comment         String?     // Add this field for approval/rejection comments
+  resolutionDate  DateTime?
+  resolutionSource String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  options         Option[]
+  trades          Trade[]
 }
 
-model Session {
-  id           String   @id @default(cuid())
-  sessionToken String   @unique
-  userId       String
-  expires      DateTime
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+model Option {
+  id          String    @id @default(cuid())
+  marketId    String
+  market      Market    @relation(fields: [marketId], references: [id])
+  text        String
+  trades      Trade[]
 }
 
-model VerificationToken {
-  identifier String
-  token      String   @unique
-  expires    DateTime
+model Trade {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  marketId    String
+  market      Market    @relation(fields: [marketId], references: [id])
+  optionId    String
+  option      Option    @relation(fields: [optionId], references: [id])
+  amount      Float
+  createdAt   DateTime  @default(now())
+}
 
-  @@unique([identifier, token])
+model Vote {
+  id        String   @id @default(cuid())
+  eventId   String
+  userId    String
+  outcome   String   // 'outcome1' or 'outcome2'
+  event     Event    @relation(fields: [eventId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([eventId, userId]) // Ensures one vote per user per event
 }
 
 model Event {
   id                String   @id @default(cuid())
-  title            String
-  description      String
-  category         String
-  outcome1         String
-  outcome2         String
-  resolutionSource String
+  title             String
+  description       String
+  category          String
+  outcome1          String
+  outcome2          String
+  status            String   @default("pending")
+  resolutionSource  String
   resolutionDateTime DateTime
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  userId           String   // Foreign key to User
-  user             User     @relation(fields: [userId], references: [id])
+  outcome1Votes     Int      @default(0)
+  outcome2Votes     Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  votes             Vote[]
+
+  @@unique([title, category])
+}
+
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum Status {
+  ACTIVE
+  PENDING
+  SUSPENDED
 } 

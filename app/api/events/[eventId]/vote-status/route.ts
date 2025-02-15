@@ -5,7 +5,7 @@ export async function GET(
   request: Request,
   { params }: { params: { eventId: string } }
 ) {
-  const cookieStore = cookies()
+  const cookieStore = await cookies()
   const voteCookie = cookieStore.get(`voted_${params.eventId}`)
 
   return NextResponse.json({

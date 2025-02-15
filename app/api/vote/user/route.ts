@@ -1,33 +1,15 @@
-import { db } from "@/lib/db"
-import { cookies } from 'next/headers'
 import { NextResponse } from "next/server"
 
 export async function GET() {
   try {
-    const cookieStore = cookies()
-    const userId = cookieStore.get('userId')?.value
+    // Return empty votes since we're not tracking user-specific votes for now
+    const votes: Record<string, string> = {};
 
-    if (!userId) {
-      return NextResponse.json({ votes: {} })
-    }
-
-    const votes = await db.vote.findMany({
-      where: {
-        userId,
-      },
-      select: {
-        eventId: true,
-        outcome: true,
-      },
-    })
-
-    // Convert to a map of eventId -> outcome
-    const voteMap = votes.reduce((acc, vote) => ({
-      ...acc,
-      [vote.eventId]: vote.outcome,
-    }), {})
-
-    return NextResponse.json({ votes: voteMap })
+    return NextResponse.json({ 
+      success: true,
+      votes,
+      message: 'Authorization disabled'
+    });
   } catch (error) {
     console.error('Error fetching user votes:', error)
     return NextResponse.json(

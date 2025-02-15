@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { toast } from "@/components/ui/use-toast";
 import {
   Select,
   SelectContent,
@@ -48,66 +50,100 @@ export default function EventsPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
   const [selectedStatus, setSelectedStatus] = useState<string>("All");
 
-  const fetchVotableEvents = async (): Promise<Event[]> => {
+  const fetchVotableEvents = async () => {
     try {
+      console.log('Fetching events...');
       const response = await fetch('/api/events');
+      const result = await response.json();
       
       if (!response.ok) {
-        console.error(`HTTP error! status: ${response.status}`);
-        return [];
+        throw new Error(result.error || `HTTP error! status: ${response.status}`);
       }
       
-      const data = await response.json();
-      
-      // Check if data is an array
-      if (!Array.isArray(data)) {
-        console.error('Expected array response, got:', typeof data, data);
-        return [];
+      if (result.success && Array.isArray(result.data)) {
+        console.log(`Successfully fetched ${result.data.length} events`);
+        return result.data;
+      } else {
+        throw new Error(result.error || 'Failed to fetch events');
       }
-      
-      // Type-safe validation of events
-      const validEvents = data.filter((event: any): event is Event => 
-        typeof event.id === 'string' &&
-        typeof event.title === 'string' &&
-        typeof event.description === 'string' &&
-        typeof event.category === 'string' &&
-        typeof event.outcome1 === 'string' &&
-        typeof event.outcome2 === 'string' &&
-        typeof event.status === 'string' &&
-        typeof event.resolutionSource === 'string' &&
-        typeof event.resolutionDateTime === 'string' &&
-        typeof event.outcome1Votes === 'number' &&
-        typeof event.outcome2Votes === 'number'
-      );
-
-      if (validEvents.length === 0) {
-        console.warn('No valid events found in the response');
-      }
-
-      return validEvents;
     } catch (error) {
       console.error('Error fetching events:', error);
-      return [];
+      throw error;
     }
   };
+
 
   const fetchEvents = async () => {
     try {
       setLoading(true);
+      setError(null);
       const events = await fetchVotableEvents();
-
-      if (events.length === 0) {
-        setError('No valid events could be loaded');
-      }
-
       setEvents(events);
+      
+      if (events.length === 0) {
+        setError('No events available');
+      }
     } catch (error) {
       console.error('Fetch events error:', error);
-      setError(error instanceof Error ? error.message : 'An unknown error occurred');
+      setError(error instanceof Error ? error.message : 'Failed to fetch events');
       setEvents([]);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleEventAction = async (eventId: string, action: 'approve' | 'reject') => {
+    try {
+      const response = await fetch('/api/events', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ eventId, action }),
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        toast({
+          title: "Success",
+          description: result.message,
+        });
+        fetchEvents(); // Refresh the events list
+      } else {
+        throw new Error(result.error);
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : 'Failed to update event',
+        variant: "destructive",
+      });
+    }
+  };
+
+  const renderEventActions = (event: Event) => {
+    if (event.status === 'pending') {
+      return (
+        <div className="flex gap-2 mt-4">
+          <Button
+            onClick={() => handleEventAction(event.id, 'approve')}
+            variant="outline"
+            className="bg-green-100 hover:bg-green-200"
+          >
+            Approve
+          </Button>
+          <Button
+            onClick={() => handleEventAction(event.id, 'reject')}
+            variant="outline"
+            className="bg-red-100 hover:bg-red-200"
+          >
+            Reject
+          </Button>
+        </div>
+      );
+    }
+    return null;
   };
 
   useEffect(() => {
@@ -160,7 +196,9 @@ export default function EventsPage() {
     <div className="container mx-auto py-10">
       <Card>
         <CardHeader>
-          <CardTitle>All Events</CardTitle>
+          <CardTitle>
+          {selectedStatus === 'pending' ? 'Approve Events' : 'All Events'}
+          </CardTitle>
           <div className="flex gap-4 mt-4">
             <div className="w-48">
               <Select
@@ -212,26 +250,27 @@ export default function EventsPage() {
                   <CardContent className="p-6">
                     <div>
                       <div className="flex justify-between items-start mb-2">
-                        <h3 className="font-semibold">{event.title}</h3>
-                        <div className="flex gap-2">
-                          <Badge className={getStatusBadgeColor(event.status)}>
-                            {event.status.charAt(0).toUpperCase() + event.status.slice(1)}
-                          </Badge>
-                          <Badge variant="outline">
-                            {event.category.replace(/([A-Z])/g, ' $1').trim()}
-                          </Badge>
-                        </div>
+                      <h3 className="font-semibold">{event.title}</h3>
+                      <div className="flex gap-2">
+                        <Badge className={getStatusBadgeColor(event.status)}>
+                        {event.status.charAt(0).toUpperCase() + event.status.slice(1)}
+                        </Badge>
+                        <Badge variant="outline">
+                        {event.category.replace(/([A-Z])/g, ' $1').trim()}
+                        </Badge>
+                      </div>
                       </div>
                       <p className="text-sm text-muted-foreground mb-2">
-                        {event.description}
+                      {event.description}
                       </p>
                       <div className="mt-2">
-                        <p className="text-sm">Outcomes:</p>
-                        <ul className="list-disc list-inside text-sm">
-                          <li>{event.outcome1}</li>
-                          <li>{event.outcome2}</li>
-                        </ul>
+                      <p className="text-sm">Outcomes:</p>
+                      <ul className="list-disc list-inside text-sm">
+                        <li>{event.outcome1}</li>
+                        <li>{event.outcome2}</li>
+                      </ul>
                       </div>
+                      {renderEventActions(event)}
                     </div>
                   </CardContent>
                 </Card>

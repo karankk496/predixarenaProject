@@ -39,22 +39,72 @@ export default function VotePage() {
       if (!response.ok) {
         throw new Error('Failed to fetch events')
       }
-      const data = await response.json()
+      const result = await response.json()
+      
+      // Ensure we have a successful response and an array of events
+      if (!result.success) {
+        console.error('Error fetching events:', result.error);
+        setError(result.error || 'Failed to load events');
+        setEvents([]);
+        return;
+      }
+
+      // Ensure we have an array before mapping
+      const rawEvents = Array.isArray(result.data) ? result.data : [];
       
       // Check cookies for each event to set initial vote state
-      const events = await Promise.all(data.map(async (event: Event) => {
-        const cookieResponse = await fetch(`/api/events/${event.id}/vote-status`)
-        if (cookieResponse.ok) {
-          const { votedFor } = await cookieResponse.json()
-          return { ...event, votedFor }
+      const events = await Promise.all(rawEvents.map(async (event: any) => {
+        // Validate event object has required properties
+        if (!event.id || !event.title) {
+          console.warn('Skipping invalid event:', event);
+          return null;
         }
-        return event
+
+        try {
+          const cookieResponse = await fetch(`/api/events/${event.id}/vote-status`)
+          if (cookieResponse.ok) {
+            const { votedFor } = await cookieResponse.json()
+            return { 
+              id: event.id,
+              title: event.title,
+              description: event.description || '',
+              category: event.category || '',
+              outcome1: event.outcome1 || '',
+              outcome2: event.outcome2 || '',
+              outcome1Votes: event.outcome1Votes || 0,
+              outcome2Votes: event.outcome2Votes || 0,
+              resolutionSource: event.resolutionSource || '',
+              resolutionDateTime: event.resolutionDateTime || new Date().toISOString(),
+              status: event.status || 'pending',
+              votedFor 
+            }
+          }
+          return {
+            id: event.id,
+            title: event.title,
+            description: event.description || '',
+            category: event.category || '',
+            outcome1: event.outcome1 || '',
+            outcome2: event.outcome2 || '',
+            outcome1Votes: event.outcome1Votes || 0,
+            outcome2Votes: event.outcome2Votes || 0,
+            resolutionSource: event.resolutionSource || '',
+            resolutionDateTime: event.resolutionDateTime || new Date().toISOString(),
+            status: event.status || 'pending'
+          }
+        } catch (voteStatusError) {
+          console.error(`Error checking vote status for event ${event.id}:`, voteStatusError);
+          return null;
+        }
       }))
       
-      setEvents(events)
+      // Filter out any null events and set state
+      const validEvents = events.filter((event): event is Event => event !== null)
+      setEvents(validEvents)
     } catch (error) {
       console.error('Error fetching events:', error)
       setError('Failed to load events')
+      setEvents([])
     } finally {
       setLoading(false)
     }
