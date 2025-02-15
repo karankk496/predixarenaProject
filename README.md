@@ -1,6 +1,8 @@
-.env
+## Environment Variables (.env)
 
+Create a `.env` file in the root of your project and add the following environment variables:
 
+```ini
 DATABASE_URL="postgresql://postgres:postgres@localhost:5432/yourdbname"
 SHADOW_DATABASE_URL="postgresql://postgres:postgres@localhost:5432/anotherdbnameforbackup"
 JWT_SECRET="yoursecret key"
@@ -17,3 +19,5 @@ JWT_EXPIRATION_TIME=3600
 # NextAuth Configuration
 NEXTAUTH_URL="http://localhost:3000"
 NEXTAUTH_SECRET="your secretkey"
+```
+
