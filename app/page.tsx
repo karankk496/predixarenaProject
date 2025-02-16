@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import Link from "next/link"
-import { MoreHorizontal, Search,Loader2, Settings, User, Globe, LogOut } from "lucide-react"
+//import { MoreHorizontal, Search, Loader2 } from "lucide-react"
+import { MoreHorizontal, Search, Settings, User, Globe, LogOut } from "lucide-react"
 import { useEffect, useState } from "react"
 import { UserProfile } from "./components/UserProfile"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -18,8 +19,9 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { Badge } from "@/components/ui/badge"
-import { formatDistanceToNow, isPast } from 'date-fns'
+// import { Badge } from "@/components/ui/badge"
+// import { formatDistanceToNow, isPast } from 'date-fns'
+import { Snackbar } from "@mui/material"
 
 interface UserData {
   id: string;
@@ -47,8 +49,10 @@ interface Event {
 
 export default function Page() {
   const [userData, setUserData] = useState<UserData | null>(null);
-  const [events, setEvents] = useState<Event[]>([]);
-  const [loading, setLoading] = useState(true);
+  // const [events, setEvents] = useState<Event[]>([]);
+  // const [loading, setLoading] = useState(true);
+  const [openSnackbar, setOpenSnackbar] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
   const router = useRouter();
 
   const handleLogout = () => {
