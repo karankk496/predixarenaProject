@@ -2,9 +2,9 @@
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Card, CardContent, CardHeader } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import Link from "next/link"
-import { MoreHorizontal, Search } from "lucide-react"
+import { MoreHorizontal, Search, Loader2 } from "lucide-react"
 import { useEffect, useState } from "react"
 import { UserProfile } from "./components/UserProfile"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -18,6 +18,8 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
+import { Badge } from "@/components/ui/badge"
+import { formatDistanceToNow, isPast } from 'date-fns'
 
 interface UserData {
   id: string;
@@ -29,8 +31,24 @@ interface UserData {
   isSuperUser: boolean;
 }
 
+interface Event {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  outcome1: string;
+  outcome2: string;
+  status: string;
+  resolutionDateTime: string;
+  outcome1Votes: number;
+  outcome2Votes: number;
+  createdAt: string;
+}
+
 export default function Page() {
   const [userData, setUserData] = useState<UserData | null>(null);
+  const [events, setEvents] = useState<Event[]>([]);
+  const [loading, setLoading] = useState(true);
   const router = useRouter();
 
   const handleLogout = () => {
@@ -38,6 +56,41 @@ export default function Page() {
     router.push('/login');
     toast.success('Logged out successfully');
   };
+
+  useEffect(() => {
+    const fetchEvents = async () => {
+      try {
+        console.log('Fetching events...'); // Debug log
+        const response = await fetch('/api/events?status=approved');
+        console.log('Response status:', response.status); // Debug log
+        
+        if (!response.ok) {
+          throw new Error('Failed to fetch events');
+        }
+        
+        const data = await response.json();
+        console.log('Fetched data:', data); // Debug log
+        
+        if (data.success) {
+          setEvents(data.events);
+        }
+      } catch (error) {
+        console.error('Error:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchEvents();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -323,38 +376,48 @@ export default function Page() {
 
           {/* Prediction Markets */}
           <div className="grid gap-4">
-            <PredictionMarket
-              title="Who will be Trump's Secretary of Agriculture?"
-              options={[
-                { name: "Brooke Rollins", percentage: "94%" },
-                { name: "Kelly Loeffler", percentage: "2%" },
-              ]}
-              value="$714,908"
-            />
-            <PredictionMarket
-              title="Who will be Trump's Secretary of Labor?"
-              options={[
-                { name: "Lori Chavez-DeRemer", percentage: "92%" },
-                { name: "Brandon Williams", percentage: "2%" },
-              ]}
-              value="$207,324"
-            />
-            <PredictionMarket
-              title="Who will be Trump's Secretary of Defense?"
-              options={[
-                { name: "Pete Hegseth", percentage: "59%" },
-                { name: "Mike Rogers", percentage: "9%" },
-              ]}
-              value="$2,905,143"
-            />
-            <PredictionMarket
-              title="When will Bitcoin hit $100k?"
-              options={[
-                { name: "Before December", percentage: "44%" },
-                { name: "Before January", percentage: "77%" },
-              ]}
-              value="$954,406"
-            />
+            {events.length === 0 ? (
+              <Card>
+                <CardContent className="p-6">
+                  <p className="text-center text-muted-foreground">
+                    No approved predictions found
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {events.map((event) => (
+                  <Card key={event.id} className="shadow-sm">
+                    <CardHeader>
+                      <CardTitle>{event.title}</CardTitle>
+                      <CardDescription>
+                        <Badge variant="outline">{event.category}</Badge>
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-sm text-muted-foreground mb-4">
+                        {event.description}
+                      </p>
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm">{event.outcome1}</span>
+                          <Badge variant="secondary">{event.outcome1Votes} votes</Badge>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm">{event.outcome2}</span>
+                          <Badge variant="secondary">{event.outcome2Votes} votes</Badge>
+                        </div>
+                        <Link href="/vote" className="block mt-4">
+                          <Button className="w-full" variant="outline">
+                            Vote Now
+                          </Button>
+                        </Link>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
           </div>
         </main>
       </div>

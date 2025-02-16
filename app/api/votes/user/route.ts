@@ -5,38 +5,34 @@ import { authOptions } from '@/lib/auth';
 
 export async function GET(request: Request) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
     const { searchParams } = new URL(request.url);
-    const eventId = searchParams.get('eventId');
+    const userId = searchParams.get('userId');
 
-    if (!eventId) {
+    if (!userId) {
       return NextResponse.json(
-        { error: 'Event ID is required' },
+        { error: 'Missing userId' },
         { status: 400 }
       );
     }
 
-    const vote = await prisma.vote.findUnique({
+    const votes = await prisma.vote.findMany({
       where: {
-        eventId_userId: {
-          eventId,
-          userId: session.user.id,
-        },
-      },
+        userId: userId
+      }
     });
 
-    return NextResponse.json({ vote });
+    return NextResponse.json({
+      success: true,
+      votes
+    });
   } catch (error) {
-    console.error('Error fetching user vote:', error);
+    console.error('Error fetching user votes:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch vote' },
+      { 
+        success: false,
+        error: 'Failed to fetch votes',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 500 }
     );
   }

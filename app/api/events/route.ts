@@ -17,44 +17,41 @@ const VALID_CATEGORIES = [
 
 export async function GET(request: Request) {
   try {
-    console.log('Starting to fetch events...');
-    
-    // Get the URL parameters
+    // Get the status from URL query parameters
     const { searchParams } = new URL(request.url);
-    const showAll = searchParams.get('showAll') === 'true';
+    const status = searchParams.get('status');
 
-    // Build the where clause based on whether we want to show all events
-    const where = showAll ? {} : {
-      status: 'approved' // Only show approved events by default
-    };
+    // Build the where clause based on status
+    const where = status ? { status: status.toLowerCase() } : {};
 
     const events = await prisma.event.findMany({
       where,
       orderBy: {
-        createdAt: 'desc',
+        createdAt: 'desc'
       },
       include: {
-        votes: true,
-      },
+        votes: true
+      }
     });
 
-    console.log(`Found ${events.length} events:`, events);
     return NextResponse.json({
       success: true,
-      data: events,
+      events,
       total: events.length
     });
+
   } catch (error) {
     console.error('Error fetching events:', error);
-    return NextResponse.json({
-      success: false,
-      error: 'Failed to fetch events',
-      data: [],
-      total: 0
-    }, { status: 500 });
+    return NextResponse.json(
+      { 
+        success: false,
+        error: "Failed to fetch events",
+        details: error instanceof Error ? error.message : "Unknown error"
+      },
+      { status: 500 }
+    );
   }
 }
-
 
 export async function POST(request: Request) {
   try {
@@ -148,10 +145,7 @@ export async function POST(request: Request) {
       code: 'INTERNAL_ERROR'
     }, { status: 500 }); // Internal Server Error
   }
-
 }
-
-
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;

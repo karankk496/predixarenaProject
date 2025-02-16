@@ -1,23 +1,33 @@
-import { prisma } from "@/lib/prisma"
-import { NextResponse } from "next/server"
+import { NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
 
 export async function GET() {
   try {
-    const events = await db.event.findMany({
+    console.log('Fetching pending events...');
+    
+    const events = await prisma.event.findMany({
       where: {
-        status: 'pending'
+        status: "pending"  // Only fetch pending events
       },
       orderBy: {
         createdAt: 'desc'
-      },
-    })
+      }
+    });
 
-    return NextResponse.json({ events })
+    console.log('Found pending events:', events);
+
+    return NextResponse.json({
+      success: true,
+      events: events
+    });
   } catch (error) {
-    console.error('Error fetching pending events:', error)
+    console.error('Error fetching pending events:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch pending events' },
+      { success: false, error: 'Failed to fetch pending events' },
       { status: 500 }
-    )
+    );
   }
-} 
+}
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0; 
