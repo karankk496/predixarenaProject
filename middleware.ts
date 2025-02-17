@@ -1,39 +1,75 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import jwt from 'jsonwebtoken'
+import * as jose from 'jose'
 
-export function middleware(request: NextRequest) {
-  // Exclude authentication for these paths
+const JWT_SECRET = process.env.JWT_SECRET || 'karansingh'; // Fallback for development
+
+interface JWTPayload {
+  userId: string;
+  email: string;
+  role: string;
+  isSuperUser: boolean;
+}
+
+export async function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl
+
+  // Public routes that don't need authentication
   if (
-    request.nextUrl.pathname.startsWith('/api/auth') ||
-    request.nextUrl.pathname === '/login' ||
-    request.nextUrl.pathname === '/register'
+    pathname.startsWith('/api/auth') ||
+    pathname === '/login' ||
+    pathname === '/register' ||
+    pathname === '/'
   ) {
     return NextResponse.next()
   }
 
-  const token = request.headers.get('authorization')?.replace('Bearer ', '')
-  console.log('Token in middleware:', token)
+  // Check for token in protected routes
+  if (pathname.startsWith('/api/')) {
+    const authHeader = request.headers.get('authorization');
+    // console.log('Auth Header:', authHeader); // Debug log
 
-  if (!token) {
-    return NextResponse.json(
-      { error: 'Authentication required' },
-      { status: 401 }
-    )
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
+
+    // Fix: Remove all instances of 'Bearer ' and trim whitespace
+    const token = authHeader.replace(/Bearer\s+/g, '').trim();
+    //console.log('Cleaned Token:', token);
+
+    try {
+      const secret = new TextEncoder().encode(JWT_SECRET);
+      const { payload } = await jose.jwtVerify(token, secret) as { payload: JWTPayload };
+   //   console.log('Decoded Token:', payload); // Debug log
+
+      const requestHeaders = new Headers(request.headers);
+      requestHeaders.set('user-role', payload.role);
+
+      const response = NextResponse.next({
+        request: {
+          headers: requestHeaders,
+        },
+      });
+
+      return response;
+    } catch (error) {
+      console.error('Token verification error:', error);
+      return NextResponse.json(
+        { error: 'Invalid token' },
+        { status: 401 }
+      )
+    }
   }
 
-  try {
-    jwt.verify(token, process.env.JWT_SECRET!)
-    return NextResponse.next()
-  } catch (error) {
-    console.error('Invalid token in middleware:', error)
-    return NextResponse.json(
-      { error: 'Invalid token' },
-      { status: 401 }
-    )
-  }
+  return NextResponse.next()
 }
 
 export const config = {
-  matcher: ['/api/:path*']
+  matcher: [
+    '/api/:path*',
+    '/((?!_next/static|_next/image|favicon.ico|api/auth/login).*)',
+  ],
 } 

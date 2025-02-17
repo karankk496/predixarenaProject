@@ -67,10 +67,6 @@ export const authOptions: NextAuthOptions = {
       version: "2.0",
     }),
   ],
-  pages: {
-    signIn: '/login',
-    error: '/auth/error',
-  },
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
@@ -81,15 +77,14 @@ export const authOptions: NextAuthOptions = {
       return token;
     },
     async session({ session, token }) {
-      if (session.user) {
-        session.user.id = token.id as string;
+      if (token) {
+        session.user.id = token.id;
         session.user.role = token.role as Role;
-        session.user.isSuperUser = token.isSuperUser as boolean;
+        session.user.isSuperUser = token.isSuperUser;
       }
       return session;
     },
   },
-  debug: process.env.NODE_ENV === 'development',
 };
 
 const handler = NextAuth(authOptions);

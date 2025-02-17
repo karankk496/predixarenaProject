@@ -22,25 +22,35 @@ export default function SignIn() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
     setIsLoading(true);
 
     try {
-      const result = await signIn('credentials', {
-        email,
-        password,
-        redirect: false,
-        callbackUrl,
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
       });
 
-      if (result?.error) {
-        setError('Invalid credentials');
-      } else {
-        router.push(callbackUrl);
+      const data = await response.json();
+
+      if (response.ok) {
+        // Store token in localStorage
+        localStorage.setItem('token', data.token);
+        
+        // Store user data
+        localStorage.setItem('userData', JSON.stringify(data.user));
+        
+        toast.success('Login successful!');
+        router.push('/');
         router.refresh();
+      } else {
+        toast.error(data.error || 'Login failed');
       }
     } catch (error) {
-      setError('An error occurred during sign in');
+      console.error('Login error:', error);
+      toast.error('An error occurred during login');
     } finally {
       setIsLoading(false);
     }

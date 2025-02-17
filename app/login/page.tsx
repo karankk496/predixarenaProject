@@ -16,17 +16,22 @@ import { FaGoogle, FaGithub, FaTwitter } from 'react-icons/fa'
 import { signIn } from 'next-auth/react'
 import { toast } from "sonner"
 import { Label } from "@/components/ui/label"
+import { Snackbar } from "@mui/material"
 
+// Define the login schema
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
   password: z.string().min(1, "Password is required"),
 })
 
+// Define the type from the schema
 type LoginFormData = z.infer<typeof loginSchema>
 
 export default function LoginPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
+  const [openSnackbar, setOpenSnackbar] = useState(false)
+  const [snackbarMessage, setSnackbarMessage] = useState('')
   const router = useRouter()
 
   const {
@@ -54,7 +59,7 @@ export default function LoginPage() {
     }
   }
 
-  const onSubmit = async (data: LoginFormData) => {
+  const onSubmit = async (formData: LoginFormData) => {
     setIsSubmitting(true)
     setFormError(null)
 
@@ -64,24 +69,49 @@ export default function LoginPage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(data),
+        body: JSON.stringify({
+          email: formData.email,
+          password: formData.password,
+        }),
       })
 
-      const result = await response.json()
+      const data = await response.json()
 
-      if (!response.ok) {
-        throw new Error(result.error || 'Login failed')
+      if (response.ok) {
+        // Store token
+        localStorage.setItem('token', data.token)
+        
+        // Store user data in the correct format
+        const userData = {
+          id: data.user.id,
+          email: data.user.email,
+          firstName: data.user.firstName,
+          lastName: data.user.lastName,
+          displayName: data.user.displayName,
+          role: data.user.role,
+          isSuperUser: data.user.isSuperUser
+        }
+        
+        localStorage.setItem('userData', JSON.stringify(userData))
+        
+        // Show success message
+        setSnackbarMessage(`Welcome back${userData.firstName ? `, ${userData.firstName}` : ''}!`)
+        setOpenSnackbar(true)
+        
+        // Redirect after a short delay to ensure message is shown
+        setTimeout(() => {
+          router.push('/')
+        }, 1000)
+      } else {
+        setFormError(data.message || 'Login failed')
+        setSnackbarMessage(data.message || 'Login failed')
+        setOpenSnackbar(true)
       }
-
-      localStorage.setItem('token', result.token)
-      console.log('Token stored:', result.token)
-      
-      router.push('/')
-      toast.success('Logged in successfully')
-
     } catch (error) {
       console.error('Login error:', error)
-      setFormError(error instanceof Error ? error.message : 'Login failed')
+      setFormError('An error occurred during login')
+      setSnackbarMessage('An error occurred during login')
+      setOpenSnackbar(true)
     } finally {
       setIsSubmitting(false)
     }
@@ -202,6 +232,14 @@ export default function LoginPage() {
           </CardFooter>
         </Card>
       </div>
+      
+      <Snackbar
+        open={openSnackbar}
+        autoHideDuration={3000}
+        onClose={() => setOpenSnackbar(false)}
+        message={snackbarMessage}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      />
     </div>
   )
 }

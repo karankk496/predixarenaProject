@@ -4,9 +4,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import Link from "next/link"
-import { MoreHorizontal, Search } from "lucide-react"
+import { MoreHorizontal, Search, Settings, User, Globe, LogOut } from "lucide-react"
 import { useEffect, useState } from "react"
-import { UserProfile } from "./components/UserProfile"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
   DropdownMenu,
@@ -18,6 +17,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
+import { Snackbar } from "@mui/material"
 
 interface UserData {
   id: string;
@@ -31,12 +31,99 @@ interface UserData {
 
 export default function Page() {
   const [userData, setUserData] = useState<UserData | null>(null);
+  const [openSnackbar, setOpenSnackbar] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
   const router = useRouter();
 
+  useEffect(() => {
+    const checkAuth = () => {
+      const token = localStorage.getItem('token');
+      const storedUserData = localStorage.getItem('userData');
+      
+      if (!token || !storedUserData) {
+        setUserData(null);
+        return;
+      }
+
+      try {
+        const parsedUserData = JSON.parse(storedUserData);
+        
+        if (!parsedUserData || !parsedUserData.id || !parsedUserData.email) {
+          throw new Error('Invalid user data structure');
+        }
+
+        setUserData(parsedUserData);
+        
+        fetch(`/api/user/profile?userId=${parsedUserData.id}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        })
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error('Failed to fetch user data');
+          }
+          return response.json();
+        })
+        .then((data) => {
+          if (data && data.user) {
+            const validUserData = {
+              id: data.user.id,
+              email: data.user.email,
+              firstName: data.user.firstName || null,
+              lastName: data.user.lastName || null,
+              displayName: data.user.displayName || null,
+              role: data.user.role,
+              isSuperUser: Boolean(data.user.isSuperUser)
+            };
+            setUserData(validUserData);
+            localStorage.setItem('userData', JSON.stringify(validUserData));
+          }
+        })
+        .catch((error) => {
+          console.error('Error fetching user data:', error);
+          // Keep existing user data on fetch error
+          toast.error('Failed to update profile data');
+        });
+      } catch (error) {
+        console.error('Error in auth check:', error);
+        localStorage.removeItem('userData');
+        localStorage.removeItem('token');
+        setUserData(null);
+      }
+    };
+
+    checkAuth();
+    const interval = setInterval(checkAuth, 10000);
+    
+    return () => {
+      clearInterval(interval);
+    };
+  }, []); // Empty dependency array since we don't need to re-run on router changes
+
   const handleLogout = () => {
-    localStorage.removeItem('token');
-    router.push('/login');
-    toast.success('Logged out successfully');
+    try {
+      // Clear local storage
+      localStorage.removeItem('token')
+      localStorage.removeItem('userData')
+      
+      // Clear user state
+      setUserData(null)
+      
+      // Show success message
+      setSnackbarMessage('You have been successfully logged out!')
+      setOpenSnackbar(true)
+      
+      // Redirect to home after a short delay to ensure message is shown
+      setTimeout(() => {
+        router.push('/')
+      }, 1500)
+    } catch (error) {
+      console.error('Logout error:', error)
+      setSnackbarMessage('Error during logout')
+      setOpenSnackbar(true)
+    }
   };
 
   return (
@@ -64,21 +151,64 @@ export default function Page() {
                         {userData.firstName?.[0]}{userData.lastName?.[0]}
                       </AvatarFallback>
                     </Avatar>
-                    <span>{userData.displayName || `${userData.firstName} ${userData.lastName}`}</span>
+                    <div className="flex flex-col items-start">
+                      <span className="text-sm font-medium">
+                        {userData.displayName || `${userData.firstName} ${userData.lastName}` || userData.email}
+                      </span>
+                      <span className="text-xs text-muted-foreground capitalize">
+                        {userData.role}
+                      </span>
+                    </div>
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuItem onClick={handleLogout} className="flex items-center gap-2 text-red-600">
+                    <LogOut className="w-4 h-4" />
+                    <span>Logout</span>
+                  </DropdownMenuItem>
+                  
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleLogout}>
-                    Log out
+                  
+                  <DropdownMenuItem asChild className="flex items-center gap-2">
+                    <Link href="/account">
+                      <User className="w-4 h-4" />
+                      <span>Account details</span>
+                    </Link>
+                  </DropdownMenuItem>
+                  
+                  {userData?.isSuperUser && (
+                    <DropdownMenuItem>
+                      <Link href="/manageusers" className="flex items-center gap-2">
+                        <Settings className="w-4 h-4" />
+                        <span>Manage Users</span>
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
+                  
+                  <DropdownMenuItem asChild className="flex items-center gap-2">
+                    <Link href="/language">
+                      <Globe className="w-4 h-4" />
+                      <span>Change language</span>
+                    </Link>
+                  </DropdownMenuItem>
+                  
+                  <DropdownMenuItem asChild className="flex items-center gap-2">
+                    <Link href="/about">
+                      <User className="w-4 h-4" />
+                      <span>About PredixArena</span>
+                    </Link>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : (
-              <Link href="/login">
-                <Button variant="secondary">Sign in</Button>
-              </Link>
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" asChild>
+                  <Link href="/login">Log in</Link>
+                </Button>
+                <Button asChild>
+                  <Link href="/register">Sign up</Link>
+                </Button>
+              </div>
             )}
           </div>
         </div>
@@ -110,27 +240,6 @@ export default function Page() {
           </div>
         </nav>
       </header>
-
-      {/* Add profile modal */}
-      {userData && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-background rounded-lg w-full max-w-3xl max-h-[90vh] overflow-y-auto">
-            <div className="p-4 flex justify-between items-center border-b">
-              <h2 className="text-lg font-semibold">Profile</h2>
-              <Button 
-                variant="ghost" 
-                size="icon"
-                onClick={() => setUserData(null)}
-              >
-                ×
-              </Button>
-            </div>
-            <div className="p-4">
-              <UserProfile onClose={() => setUserData(null)} />
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Main Content */}
       <div className="container py-6 grid grid-cols-[240px,1fr] gap-6">
@@ -325,6 +434,14 @@ export default function Page() {
           </div>
         </main>
       </div>
+
+      <Snackbar
+        open={openSnackbar}
+        autoHideDuration={3000}
+        onClose={() => setOpenSnackbar(false)}
+        message={snackbarMessage}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      />
     </div>
   )
 }
