@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import * as jose from 'jose'
+import { jwtVerify } from 'jose'
 
-const JWT_SECRET = process.env.JWT_SECRET || 'karansingh'; // Fallback for development
+const JWT_SECRET = process.env.JWT_SECRET;
 
 interface JWTPayload {
   userId: string;
@@ -42,16 +42,15 @@ export async function middleware(request: NextRequest) {
 
     try {
       const secret = new TextEncoder().encode(JWT_SECRET);
-      const { payload } = await jose.jwtVerify(token, secret) as { payload: JWTPayload };
+      const { payload } = await jwtVerify(token, secret) as { payload: JWTPayload };
       console.log('Decoded Token:', payload); // Debug log
 
       const requestHeaders = new Headers(request.headers);
-      requestHeaders.set('user-role', payload.role);
+      requestHeaders.set('x-user-id', payload.userId as string);
+      requestHeaders.set('x-user-role', payload.role as string);
 
       const response = NextResponse.next({
-        request: {
-          headers: requestHeaders,
-        },
+        headers: requestHeaders,
       });
 
       return response;
@@ -64,12 +63,40 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  return NextResponse.next()
+  try {
+    const token = request.cookies.get('token')?.value;
+    
+    // If no token exists, just continue
+    if (!token) {
+      return NextResponse.next();
+    }
+
+    // Debug logs
+    console.log('Token found:', token.substring(0, 20) + '...');
+    console.log('JWT_SECRET exists:', !!process.env.JWT_SECRET);
+
+    const secret = new TextEncoder().encode(process.env.JWT_SECRET);
+    
+    try {
+      const { payload } = await jwtVerify(token, secret);
+      console.log('Token verified successfully');
+      return NextResponse.next();
+    } catch (verifyError) {
+      console.log('Token verification failed:', verifyError);
+      // Clear the invalid token
+      const response = NextResponse.next();
+      response.cookies.delete('token');
+      return response;
+    }
+
+  } catch (error) {
+    console.error('Middleware error:', error);
+    return NextResponse.next();
+  }
 }
 
 export const config = {
   matcher: [
-    '/api/:path*',
-    '/((?!_next/static|_next/image|favicon.ico|api/auth/login).*)',
-  ],
-} 
+    '/api/((?!auth).*)' // Matches all /api/ routes except /api/auth
+  ]
+}; 

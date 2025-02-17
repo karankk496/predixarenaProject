@@ -1,107 +1,127 @@
-import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { Prisma } from '@prisma/client';
+import { prisma } from "@/lib/prisma"
+import { NextResponse } from "next/server"
+// import { getServerSession } from "next-auth"
+// import { authOptions } from "@/lib/auth"
 
 export async function POST(request: Request) {
   try {
-    const session = await getServerSession(authOptions);
-    
-    if (!session?.user) {
+    // Comment out authorization checks for now
+    /*
+    const session = await getServerSession(authOptions)
+    if (!session) {
       return NextResponse.json(
-        { error: 'You must be logged in to vote' },
+        { error: "Unauthorized" },
         { status: 401 }
-      );
+      )
     }
+    */
 
-    const { eventId, outcome } = await request.json();
+    const { eventId, outcome, userId = 'anonymous' } = await request.json()
 
     if (!eventId || !outcome) {
       return NextResponse.json(
-        { error: 'Missing required fields' },
+        { error: "Missing eventId or outcome" },
         { status: 400 }
-      );
+      )
     }
 
-    // Check if event exists and hasn't ended
+    // Check if event exists, is approved, and hasn't ended
     const event = await prisma.event.findUnique({
-      where: { id: eventId },
-    });
+      where: {
+        id: eventId,
+        status: "approved"
+      }
+    })
 
     if (!event) {
       return NextResponse.json(
-        { error: 'Event not found' },
+        { error: "Event not found or not approved" },
         { status: 404 }
-      );
+      )
     }
 
+    // Check if event has ended
     if (new Date(event.resolutionDateTime) < new Date()) {
       return NextResponse.json(
-        { error: 'Event has ended' },
+        { error: "Event has ended. Voting is closed." },
         { status: 400 }
-      );
+      )
     }
 
-    try {
-      // Use upsert to handle both create and update cases
-      const vote = await prisma.vote.upsert({
-        where: {
-          eventId_userId: {
-            eventId,
-            userId: session.user.id,
-          },
-        },
-        update: {
-          outcome, // Update the outcome if vote exists
-        },
-        create: {
-          eventId,
-          userId: session.user.id,
-          outcome,
-        },
-      });
-
-      // Update event vote counts
-      await prisma.event.update({
-        where: { id: eventId },
-        data: {
-          outcome1Votes: await prisma.vote.count({
-            where: {
-              eventId,
-              outcome: 'outcome1',
-            },
-          }),
-          outcome2Votes: await prisma.vote.count({
-            where: {
-              eventId,
-              outcome: 'outcome2',
-            },
-          }),
-        },
-      });
-
-      return NextResponse.json({ 
-        success: true, 
-        vote,
-        message: 'Vote recorded successfully' 
-      });
-    } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError) {
-        if (error.code === 'P2002') {
-          return NextResponse.json(
-            { error: 'You have already voted for this event' },
-            { status: 409 }
-          );
-        }
+    // Check for existing vote
+    const existingVote = await prisma.vote.findFirst({
+      where: {
+        eventId,
+        userId
       }
-      throw error;
+    })
+
+    let vote;
+    if (existingVote) {
+      // Update existing vote
+      vote = await prisma.$transaction([
+        prisma.vote.update({
+          where: { id: existingVote.id },
+          data: { outcome }
+        }),
+        // Decrement old outcome count
+        prisma.event.update({
+          where: { id: eventId },
+          data: {
+            [existingVote.outcome === 'outcome1' ? 'outcome1Votes' : 'outcome2Votes']: {
+              decrement: 1
+            }
+          }
+        }),
+        // Increment new outcome count
+        prisma.event.update({
+          where: { id: eventId },
+          data: {
+            [outcome === 'outcome1' ? 'outcome1Votes' : 'outcome2Votes']: {
+              increment: 1
+            }
+          }
+        })
+      ])
+    } else {
+      // Create new vote
+      vote = await prisma.$transaction([
+        prisma.vote.create({
+          data: {
+            eventId,
+            outcome,
+            userId
+          }
+        }),
+        prisma.event.update({
+          where: { id: eventId },
+          data: {
+            [outcome === 'outcome1' ? 'outcome1Votes' : 'outcome2Votes']: {
+              increment: 1
+            }
+          }
+        })
+      ])
     }
+
+    return NextResponse.json({
+      success: true,
+      message: existingVote ? "Vote updated successfully" : "Vote recorded successfully",
+      vote: vote[0]
+    })
+
   } catch (error) {
-    console.error('Vote error:', error);
+    console.error('Vote error:', error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to process vote' },
+      { 
+        success: false,
+        error: "Failed to process vote",
+        details: error instanceof Error ? error.message : "Unknown error"
+      },
       { status: 500 }
-    );
+    )
   }
-} 
+}
+
+export const dynamic = 'force-dynamic'
+export const revalidate = 0 

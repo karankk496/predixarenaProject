@@ -1,250 +1,318 @@
-"use client"
+'use client';
 
-import { useState, useEffect } from "react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Progress } from "@/components/ui/progress"
-import { Loader2, CheckIcon } from "lucide-react"
-import { useToast } from "@/components/ui/use-toast"
+import { useEffect, useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Loader2, Filter } from "lucide-react";
+import { useToast } from "@/components/ui/use-toast";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { formatDistanceToNow, isPast } from 'date-fns';
 
 interface Event {
-  id: string
-  title: string
-  description: string
-  category: string
-  outcome1: string
-  outcome2: string
-  outcome1Votes: number
-  outcome2Votes: number
-  resolutionSource: string
-  resolutionDateTime: string
-  status: string
-  hasVoted?: boolean
-  votedFor?: 'outcome1' | 'outcome2'
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  outcome1: string;
+  outcome2: string;
+  status: string;
+  resolutionSource: string;
+  resolutionDateTime: string;
+  outcome1Votes: number;
+  outcome2Votes: number;
+  createdAt: string;
 }
 
+interface Vote {
+  eventId: string;
+  outcome: 'outcome1' | 'outcome2';
+  userId: string;
+}
+
+const CATEGORY_FILTERS = [
+  { value: "all", label: "All Categories" },
+  { value: "Creators", label: "Creators" },
+  { value: "Sports", label: "Sports" },
+  { value: "GlobalElections", label: "Global Elections" },
+  { value: "Politics", label: "Politics" },
+  { value: "Crypto", label: "Crypto" },
+  { value: "Business", label: "Business" },
+  { value: "Science", label: "Science" },
+] as const;
+
 export default function VotePage() {
-  const [events, setEvents] = useState<Event[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const { toast } = useToast()
+  const { toast } = useToast();
+  const [events, setEvents] = useState<Event[]>([]);
+  const [filteredEvents, setFilteredEvents] = useState<Event[]>([]);
+  const [userVotes, setUserVotes] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
 
   useEffect(() => {
-    fetchVotableEvents()
-  }, [])
+    fetchApprovedEvents();
+    fetchUserVotes();
+  }, []);
 
-  const fetchVotableEvents = async () => {
-    try {
-      const response = await fetch('/api/events?status=approved')
-      if (!response.ok) {
-        throw new Error('Failed to fetch events')
-      }
-      const data = await response.json()
-      
-      // Check cookies for each event to set initial vote state
-      const events = await Promise.all(data.map(async (event: Event) => {
-        const cookieResponse = await fetch(`/api/events/${event.id}/vote-status`)
-        if (cookieResponse.ok) {
-          const { votedFor } = await cookieResponse.json()
-          return { ...event, votedFor }
-        }
-        return event
-      }))
-      
-      setEvents(events)
-    } catch (error) {
-      console.error('Error fetching events:', error)
-      setError('Failed to load events')
-    } finally {
-      setLoading(false)
+  useEffect(() => {
+    filterEvents();
+  }, [events, categoryFilter]);
+
+  const filterEvents = () => {
+    let filtered = [...events];
+
+    if (categoryFilter !== "all") {
+      filtered = filtered.filter(event => 
+        event.category === categoryFilter
+      );
     }
-  }
+
+    filtered.sort((a, b) => 
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+
+    setFilteredEvents(filtered);
+  };
+
+  const fetchApprovedEvents = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch('/api/events?status=approved');
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch approved events');
+      }
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setEvents(data.events);
+      } else {
+        throw new Error(data.error || 'Failed to fetch events');
+      }
+    } catch (error) {
+      console.error('Error fetching events:', error);
+      setError(error instanceof Error ? error.message : 'Failed to fetch events');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchUserVotes = async () => {
+    try {
+      const response = await fetch('/api/votes/user?userId=anonymous');
+      if (response.ok) {
+        const data = await response.json();
+        const votesMap: Record<string, string> = {};
+        data.votes.forEach((vote: Vote) => {
+          votesMap[vote.eventId] = vote.outcome;
+        });
+        setUserVotes(votesMap);
+      }
+    } catch (error) {
+      console.error('Error fetching user votes:', error);
+    }
+  };
 
   const handleVote = async (eventId: string, outcome: 'outcome1' | 'outcome2') => {
     try {
-      console.log('Attempting to vote:', { eventId, outcome })
+      if (userVotes[eventId] === outcome) {
+        return;
+      }
 
-      const event = events.find(e => e.id === eventId)
-      const previousVote = event?.votedFor
-
-      const response = await fetch(`/api/events/${eventId}/vote`, {
+      const response = await fetch('/api/votes', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
+          eventId,
           outcome,
-          previousVote // Send the previous vote to the API
+          userId: 'anonymous'
         }),
-      })
+      });
 
-      const data = await response.json()
-      console.log('Vote response:', { status: response.status, data })
+      const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || data.message || 'Failed to submit vote')
+        throw new Error(data.error || 'Failed to vote');
       }
 
-      // Update local state
-      setEvents(events.map(event => {
-        if (event.id === eventId) {
-          // If changing vote, decrement previous vote count
-          const newEvent = {
-            ...event,
-            votedFor: outcome,
-            [`${outcome}Votes`]: (event[`${outcome}Votes`] || 0) + 1
+      setUserVotes(prev => ({
+        ...prev,
+        [eventId]: outcome
+      }));
+
+      setEvents(prevEvents => 
+        prevEvents.map(event => {
+          if (event.id === eventId) {
+            const prevOutcome = userVotes[eventId];
+            return {
+              ...event,
+              outcome1Votes: event.outcome1Votes + (
+                outcome === 'outcome1' ? 1 : 0
+              ) - (prevOutcome === 'outcome1' ? 1 : 0),
+              outcome2Votes: event.outcome2Votes + (
+                outcome === 'outcome2' ? 1 : 0
+              ) - (prevOutcome === 'outcome2' ? 1 : 0)
+            };
           }
-          
-          if (previousVote) {
-            newEvent[`${previousVote}Votes`] = Math.max(0, (event[`${previousVote}Votes`] || 0) - 1)
-          }
-          
-          return newEvent
-        }
-        return event
-      }))
+          return event;
+        })
+      );
 
       toast({
-        title: previousVote ? "Vote Changed" : "Vote Recorded",
-        description: previousVote ? "Your vote has been successfully changed." : "Your vote has been successfully recorded.",
-      })
+        title: "Success",
+        description: userVotes[eventId] 
+          ? "Vote updated successfully" 
+          : "Vote recorded successfully",
+      });
     } catch (error) {
-      console.error('Error voting:', {
-        error,
-        message: error instanceof Error ? error.message : 'Unknown error',
-        stack: error instanceof Error ? error.stack : undefined
-      })
-
+      console.error('Vote error:', error);
       toast({
-        variant: "destructive",
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to submit vote",
-      })
+        description: error instanceof Error ? error.message : 'Failed to vote',
+        variant: "destructive",
+      });
     }
-  }
+  };
+
+  const isEventEnded = (resolutionDateTime: string) => {
+    return isPast(new Date(resolutionDateTime));
+  };
 
   const getTimeRemaining = (resolutionDateTime: string) => {
-    const now = new Date().getTime()
-    const resolution = new Date(resolutionDateTime).getTime()
-    const timeLeft = resolution - now
-
-    if (timeLeft <= 0) return "Event ended"
-
-    const days = Math.floor(timeLeft / (1000 * 60 * 60 * 24))
-    const hours = Math.floor((timeLeft % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
-    const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60))
-
-    return `${days}d ${hours}h ${minutes}m`
-  }
-
-  const calculateVotePercentage = (votes: number | undefined, totalVotes: number) => {
-    if (!votes || totalVotes === 0) return 0
-    return (votes / totalVotes) * 100
-  }
+    return formatDistanceToNow(new Date(resolutionDateTime), { addSuffix: true });
+  };
 
   if (loading) {
     return (
-      <div className="container mx-auto py-10 flex justify-center">
+      <div className="flex justify-center items-center min-h-screen">
         <Loader2 className="h-8 w-8 animate-spin" />
       </div>
-    )
+    );
   }
 
   if (error) {
     return (
       <div className="container mx-auto py-10">
-        <div className="text-center text-red-600">{error}</div>
+        <div className="text-red-600 text-center">
+          <p>{error}</p>
+        </div>
       </div>
-    )
+    );
   }
 
   return (
     <div className="container mx-auto py-10">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Vote on Predictions</h1>
+        <div className="flex items-center gap-4">
+          <h1 className="text-2xl font-bold">Vote on Predictions</h1>
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 text-muted-foreground" />
+            <Select
+              value={categoryFilter}
+              onValueChange={setCategoryFilter}
+            >
+              <SelectTrigger className="w-[160px]">
+                <SelectValue placeholder="Filter by Category" />
+              </SelectTrigger>
+              <SelectContent>
+                {CATEGORY_FILTERS.map(({ value, label }) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
       </div>
 
-      {events.length === 0 ? (
+      <div className="mb-4">
+        <p className="text-sm text-muted-foreground">
+          Showing {filteredEvents.length} approved predictions
+          {categoryFilter !== "all" ? ` in ${categoryFilter}` : ""}
+        </p>
+      </div>
+
+      {filteredEvents.length === 0 ? (
         <Card>
           <CardContent className="p-6">
-            <p className="text-center text-muted-foreground">No events available for voting.</p>
+            <p className="text-center text-muted-foreground">
+              No approved predictions found
+              {categoryFilter !== "all" ? ` in ${categoryFilter}` : ""}
+            </p>
           </CardContent>
         </Card>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {events.map((event) => {
-            const totalVotes = (event.outcome1Votes || 0) + (event.outcome2Votes || 0)
-            const outcome1Percentage = calculateVotePercentage(event.outcome1Votes, totalVotes)
-            const outcome2Percentage = calculateVotePercentage(event.outcome2Votes, totalVotes)
-
+          {filteredEvents.map((event) => {
+            const hasVoted = userVotes[event.id];
+            const eventEnded = isEventEnded(event.resolutionDateTime);
+            
             return (
-              <Card key={event.id}>
+              <Card key={event.id} className="shadow-sm">
                 <CardHeader>
                   <CardTitle>{event.title}</CardTitle>
-                  <CardDescription>{event.category}</CardDescription>
+                  <CardDescription>
+                    <div className="flex flex-col gap-2">
+                      <Badge variant="outline">{event.category}</Badge>
+                      <p className="text-sm">
+                        {eventEnded 
+                          ? "Event has ended"
+                          : `Ends ${getTimeRemaining(event.resolutionDateTime)}`
+                        }
+                      </p>
+                    </div>
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <p className="text-sm text-muted-foreground mb-4">{event.description}</p>
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <div className="space-y-1">
-                        <div className="flex justify-between text-sm">
-                          <span>{event.outcome1}</span>
-                          <span>{outcome1Percentage.toFixed(1)}%</span>
-                        </div>
-                        <Progress 
-                          value={outcome1Percentage} 
-                          className={`h-2 ${event.votedFor === 'outcome1' ? 'bg-primary' : ''}`}
-                        />
+                  <div className="space-y-2">
+                    {!eventEnded && (
+                      <div className="mt-4 space-y-2">
                         <Button 
-                          className="w-full mt-1 relative"
-                          variant={event.votedFor === 'outcome1' ? 'default' : 'outline'}
-                          onClick={() => handleVote(event.id, 'outcome1')}
-                          disabled={event.votedFor === 'outcome1'}
+                          onClick={() => handleVote(event.id, 'outcome1')} 
+                          className={`w-full mb-2`}
+                          variant={hasVoted === 'outcome1' ? "default" : "outline"}
+                          disabled={eventEnded}
                         >
-                          <span className="flex items-center gap-2">
-                            {event.votedFor === 'outcome1' && <CheckIcon className="h-4 w-4" />}
-                            {event.votedFor === 'outcome1' ? 'Voted' : event.votedFor ? 'Change Vote' : 'Vote'} ({event.outcome1Votes || 0})
-                          </span>
+                          {hasVoted === 'outcome1' && '✓ '}
+                          {event.outcome1} ({event.outcome1Votes})
+                        </Button>
+                        <Button 
+                          onClick={() => handleVote(event.id, 'outcome2')} 
+                          className={`w-full`}
+                          variant={hasVoted === 'outcome2' ? "default" : "outline"}
+                          disabled={eventEnded}
+                        >
+                          {hasVoted === 'outcome2' && '✓ '}
+                          {event.outcome2} ({event.outcome2Votes})
                         </Button>
                       </div>
-
-                      <div className="space-y-1">
-                        <div className="flex justify-between text-sm">
-                          <span>{event.outcome2}</span>
-                          <span>{outcome2Percentage.toFixed(1)}%</span>
-                        </div>
-                        <Progress 
-                          value={outcome2Percentage} 
-                          className={`h-2 ${event.votedFor === 'outcome2' ? 'bg-primary' : ''}`}
-                        />
-                        <Button 
-                          className="w-full mt-1 relative"
-                          variant={event.votedFor === 'outcome2' ? 'default' : 'outline'}
-                          onClick={() => handleVote(event.id, 'outcome2')}
-                          disabled={event.votedFor === 'outcome2'}
-                        >
-                          <span className="flex items-center gap-2">
-                            {event.votedFor === 'outcome2' && <CheckIcon className="h-4 w-4" />}
-                            {event.votedFor === 'outcome2' ? 'Voted' : event.votedFor ? 'Change Vote' : 'Vote'} ({event.outcome2Votes || 0})
-                          </span>
-                        </Button>
+                    )}
+                    {eventEnded && (
+                      <div className="mt-4">
+                        <p className="text-center text-muted-foreground">
+                          Voting is closed
+                        </p>
                       </div>
-                    </div>
-
-                    <div className="text-sm text-muted-foreground">
-                      <p>Time Remaining: {getTimeRemaining(event.resolutionDateTime)}</p>
-                      <p className="mt-1">Total Votes: {totalVotes}</p>
-                      <p className="mt-1">Source: {event.resolutionSource}</p>
-                    </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
-            )
+            );
           })}
         </div>
       )}
     </div>
-  )
-}
-
+  );
+} 

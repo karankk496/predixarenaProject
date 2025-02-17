@@ -39,7 +39,7 @@ export default function ApproveEventsPage() {
   const fetchEvents = async () => {
     try {
       setLoading(true)
-      const response = await fetch('/api/events?showAll=true')
+      const response = await fetch('/api/admin/approve-event')
       
       if (!response.ok) {
         throw new Error('Failed to fetch events')
@@ -48,8 +48,8 @@ export default function ApproveEventsPage() {
       const data = await response.json()
       console.log('API Response:', data) // Debug log
 
-      if (data && data.events) {
-        setEvents(data.events)
+      if (data && data.success) {
+        setEvents(data.data)
       } else {
         setEvents([])
       }
@@ -187,4 +187,18 @@ export default function ApproveEventsPage() {
     </div>
   )
 }
+
+// TODO: Add authentication check for admin routes
+// export async function getServerSideProps(context) {
+//   const session = await getServerSession(context.req, context.res, authOptions);
+//   if (!session?.user?.isSuperUser) {
+//     return {
+//       redirect: {
+//         destination: '/login',
+//         permanent: false,
+//       },
+//     };
+//   }
+//   return { props: {} };
+// }
 

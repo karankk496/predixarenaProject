@@ -13,12 +13,8 @@
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
     "@headlessui/react": "^1.7.18",
-<<<<<<< HEAD
-    "@hookform/resolvers": "^4.0.0",
-=======
     "@hookform/resolvers": "latest",
     "@mui/material": "^6.4.4",
->>>>>>> 80b0e31 (manageusers and profile section updated)
     "@prisma/client": "^6.3.1",
     "@radix-ui/react-accordion": "^1.2.2",
     "@radix-ui/react-alert-dialog": "^1.1.4",
@@ -64,17 +60,11 @@
     "next": "latest",
     "next-auth": "^4.24.11",
     "next-themes": "^0.4.4",
-    "react": "latest",
+    "react": "^18.2.0",
     "react-day-picker": "8.10.1",
-<<<<<<< HEAD
-    "react-dom": "latest",
-    "react-hook-form": "^7.54.2",
-    "react-hot-toast": "^2.5.1",
-=======
-    "react-dom": "^19.0.0",
+    "react-dom": "^18.2.0",
     "react-hook-form": "latest",
     "react-hot-toast": "^2.5.2",
->>>>>>> 80b0e31 (manageusers and profile section updated)
     "react-icons": "^5.4.0",
     "react-resizable-panels": "^2.1.7",
     "recharts": "2.15.0",

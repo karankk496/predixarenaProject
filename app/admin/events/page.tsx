@@ -31,7 +31,7 @@ export default function AdminEventsPage() {
 
   const fetchEvents = async () => {
     try {
-      const response = await fetch('/api/events?status=pending')
+      const response = await fetch('/api/events')
       if (!response.ok) {
         throw new Error('Failed to fetch events')
       }
@@ -64,7 +64,7 @@ export default function AdminEventsPage() {
   return (
     <div className="container mx-auto py-10">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Approve Events</h1>
+        <h1 className="text-2xl font-bold">All Events</h1>
         <Link href="/events/create">
           <Button>Create New Event</Button>
         </Link>
@@ -73,7 +73,7 @@ export default function AdminEventsPage() {
       {events.length === 0 ? (
         <Card>
           <CardContent className="p-6">
-            <p className="text-center text-muted-foreground">No events pending approval.</p>
+            <p className="text-center text-muted-foreground">No events found.</p>
           </CardContent>
         </Card>
       ) : (
@@ -84,6 +84,15 @@ export default function AdminEventsPage() {
                 <CardTitle>{event.title}</CardTitle>
                 <CardDescription>
                   {event.category} • Created {new Date(event.createdAt).toLocaleDateString()}
+                  <div className="mt-1">
+                  <span className={`text-sm ${
+                    event.status === 'APPROVED' ? 'text-green-600' : 
+                    event.status === 'REJECTED' ? 'text-red-600' : 
+                    'text-yellow-600'
+                  }`}>
+                    Status: {event.status}
+                  </span>
+                  </div>
                 </CardDescription>
               </CardHeader>
               <CardContent>

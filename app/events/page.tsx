@@ -1,9 +1,12 @@
 'use client';
 
 import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import Link from "next/link";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2 } from "lucide-react";
+import { Loader2, Filter } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { toast } from "@/components/ui/use-toast";
 import {
   Select,
   SelectContent,
@@ -22,9 +25,15 @@ interface Event {
   status: string;
   resolutionSource: string;
   resolutionDateTime: string;
-  outcome1Votes: number;
-  outcome2Votes: number;
+  createdAt: string;
 }
+
+const STATUS_FILTERS = [
+  { value: "all", label: "All Events" },
+  { value: "approved", label: "Approved Events" },
+  { value: "rejected", label: "Rejected Events" },
+  { value: "pending", label: "Pending Events" }
+] as const;
 
 const categories = [
   "All",
@@ -43,100 +52,181 @@ const statuses = ["All", "approved", "rejected", "pending"] as const;
 
 export default function EventsPage() {
   const [events, setEvents] = useState<Event[]>([]);
+  const [filteredEvents, setFilteredEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
   const [selectedStatus, setSelectedStatus] = useState<string>("All");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
 
-  const fetchVotableEvents = async (): Promise<Event[]> => {
+  const fetchAllEvents = async () => {
     try {
+      setLoading(true);
       const response = await fetch('/api/events');
       
       if (!response.ok) {
-        console.error(`HTTP error! status: ${response.status}`);
-        return [];
+        throw new Error('Failed to fetch events');
       }
       
       const data = await response.json();
       
-      // Check if data is an array
-      if (!Array.isArray(data)) {
-        console.error('Expected array response, got:', typeof data, data);
-        return [];
+      if (data.success) {
+        setEvents(data.events);
+      } else {
+        throw new Error(data.error || 'Failed to fetch events');
       }
-      
-      // Type-safe validation of events
-      const validEvents = data.filter((event: any): event is Event => 
-        typeof event.id === 'string' &&
-        typeof event.title === 'string' &&
-        typeof event.description === 'string' &&
-        typeof event.category === 'string' &&
-        typeof event.outcome1 === 'string' &&
-        typeof event.outcome2 === 'string' &&
-        typeof event.status === 'string' &&
-        typeof event.resolutionSource === 'string' &&
-        typeof event.resolutionDateTime === 'string' &&
-        typeof event.outcome1Votes === 'number' &&
-        typeof event.outcome2Votes === 'number'
-      );
-
-      if (validEvents.length === 0) {
-        console.warn('No valid events found in the response');
-      }
-
-      return validEvents;
     } catch (error) {
       console.error('Error fetching events:', error);
-      return [];
-    }
-  };
-
-  const fetchEvents = async () => {
-    try {
-      setLoading(true);
-      const events = await fetchVotableEvents();
-
-      if (events.length === 0) {
-        setError('No valid events could be loaded');
-      }
-
-      setEvents(events);
-    } catch (error) {
-      console.error('Fetch events error:', error);
-      setError(error instanceof Error ? error.message : 'An unknown error occurred');
-      setEvents([]);
+      setError(error instanceof Error ? error.message : 'Failed to fetch events');
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchEvents();
-  }, []);
+  const handleVote = async (eventId: string, outcome: 'outcome1' | 'outcome2') => {
+    try {
+      const response = await fetch('/api/votes', {  // Updated endpoint
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          eventId,
+          outcome,
+        }),
+      });
 
-  const getStatusBadgeColor = (status: string) => {
-    const styles = {
-      approved: "bg-green-100 text-green-800",
-      rejected: "bg-red-100 text-red-800",
-      pending: "bg-yellow-100 text-yellow-800",
-    };
-    return styles[status as keyof typeof styles] || "bg-gray-100 text-gray-800";
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to vote');
+      }
+
+      toast.success('Vote recorded successfully');
+      await fetchAllEvents();
+    } catch (error) {
+      console.error('Vote error:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to vote');
+    }
   };
 
-  const filteredEvents = events.filter(event => {
-    const categoryMatch = selectedCategory === "All" || event.category === selectedCategory;
-    const statusMatch = selectedStatus === "All" || event.status === selectedStatus;
-    return categoryMatch && statusMatch;
-  });
+  const handleEventAction = async (eventId: string, action: 'approve' | 'reject') => {
+    try {
+      const response = await fetch('/api/events', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ eventId, action }),
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        toast({
+          title: "Success",
+          description: result.message,
+        });
+        fetchAllEvents(); // Refresh the events list
+      } else {
+        throw new Error(result.error);
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : 'Failed to update event',
+        variant: "destructive",
+      });
+    }
+  };
+
+  const checkVoteStatus = async (eventId: string) => {
+    try {
+      const response = await fetch('/api/votes/status', {  // Updated endpoint
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          eventId,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to check vote status');
+      }
+
+      return data.hasVoted;
+    } catch (error) {
+      console.error('Vote status check error:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to check vote status');
+      return false;
+    }
+  };
+
+  const renderEventActions = (event: Event) => {
+    if (event.status === 'pending') {
+      return (
+        <div className="flex gap-2 mt-4">
+          <Button
+            onClick={() => handleEventAction(event.id, 'approve')}
+            variant="outline"
+            className="bg-green-100 hover:bg-green-200"
+          >
+            Approve
+          </Button>
+          <Button
+            onClick={() => handleEventAction(event.id, 'reject')}
+            variant="outline"
+            className="bg-red-100 hover:bg-red-200"
+          >
+            Reject
+          </Button>
+        </div>
+      );
+    }
+    return null;
+  };
 
   useEffect(() => {
-    console.log('Filtered events:', {
-      total: events.length,
-      filtered: filteredEvents.length,
-      category: selectedCategory,
-      status: selectedStatus
-    });
-  }, [events, filteredEvents, selectedCategory, selectedStatus]);
+    fetchAllEvents();
+  }, []);
+
+  useEffect(() => {
+    filterEvents();
+  }, [events, statusFilter]);
+
+  const filterEvents = () => {
+    let filtered = [...events];
+
+    // Apply status filter
+    if (statusFilter !== "all") {
+      filtered = filtered.filter(event => 
+        event.status.toLowerCase() === statusFilter.toLowerCase()
+      );
+    }
+
+    // Sort by creation date (newest first)
+    filtered.sort((a, b) => 
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+
+    setFilteredEvents(filtered);
+  };
+
+  const getStatusBadgeColor = (status: string) => {
+    switch (status.toLowerCase()) {
+      case 'approved':
+        return 'bg-green-100 text-green-800';
+      case 'rejected':
+        return 'bg-red-100 text-red-800';
+      default:
+        return 'bg-yellow-100 text-yellow-800';
+    }
+  };
 
   if (loading) {
     return (
@@ -158,88 +248,79 @@ export default function EventsPage() {
 
   return (
     <div className="container mx-auto py-10">
-      <Card>
-        <CardHeader>
-          <CardTitle>All Events</CardTitle>
-          <div className="flex gap-4 mt-4">
-            <div className="w-48">
-              <Select
-                value={selectedCategory}
-                onValueChange={setSelectedCategory}
-              >
-                <SelectTrigger className="bg-white">
-                  <SelectValue placeholder="Filter by category" />
-                </SelectTrigger>
-                <SelectContent className="bg-white">
-                  {categories.map((category) => (
-                    <SelectItem key={category} value={category}>
-                      {category === "All" 
-                        ? "All Categories" 
-                        : category.replace(/([A-Z])/g, ' $1').trim()}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="w-48">
-              <Select
-                value={selectedStatus}
-                onValueChange={setSelectedStatus}
-              >
-                <SelectTrigger className="bg-white">
-                  <SelectValue placeholder="Filter by status" />
-                </SelectTrigger>
-                <SelectContent className="bg-white">
-                  {statuses.map((status) => (
-                    <SelectItem key={status} value={status}>
-                      {status === "All" 
-                        ? "All Statuses" 
-                        : status.charAt(0).toUpperCase() + status.slice(1)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+      <div className="flex justify-between items-center mb-6">
+        <div className="flex items-center gap-4">
+          <h1 className="text-2xl font-bold">All Events</h1>
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 text-muted-foreground" />
+            <Select
+              value={statusFilter}
+              onValueChange={setStatusFilter}
+            >
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Filter by status" />
+              </SelectTrigger>
+              <SelectContent>
+                {STATUS_FILTERS.map(({ value, label }) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-        </CardHeader>
-        <CardContent>
-          {filteredEvents.length === 0 ? (
-            <p className="text-center text-muted-foreground">No events found</p>
-          ) : (
-            <div className="space-y-4">
-              {filteredEvents.map((event) => (
-                <Card key={event.id} className="shadow-sm">
-                  <CardContent className="p-6">
-                    <div>
-                      <div className="flex justify-between items-start mb-2">
-                        <h3 className="font-semibold">{event.title}</h3>
-                        <div className="flex gap-2">
-                          <Badge className={getStatusBadgeColor(event.status)}>
-                            {event.status.charAt(0).toUpperCase() + event.status.slice(1)}
-                          </Badge>
-                          <Badge variant="outline">
-                            {event.category.replace(/([A-Z])/g, ' $1').trim()}
-                          </Badge>
-                        </div>
-                      </div>
-                      <p className="text-sm text-muted-foreground mb-2">
-                        {event.description}
-                      </p>
-                      <div className="mt-2">
-                        <p className="text-sm">Outcomes:</p>
-                        <ul className="list-disc list-inside text-sm">
-                          <li>{event.outcome1}</li>
-                          <li>{event.outcome2}</li>
-                        </ul>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+        </div>
+        <Link href="/events/create">
+          <Button>Create New Event</Button>
+        </Link>
+      </div>
+
+      <div className="mb-4">
+        <p className="text-sm text-muted-foreground">
+          Showing {filteredEvents.length} {statusFilter !== "all" ? statusFilter : ""} events
+        </p>
+      </div>
+
+      {filteredEvents.length === 0 ? (
+        <Card>
+          <CardContent className="p-6">
+            <p className="text-center text-muted-foreground">
+              No {statusFilter !== "all" ? statusFilter : ""} events found
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {filteredEvents.map((event) => (
+            <Card key={event.id} className="shadow-sm">
+              <CardHeader>
+                <CardTitle>{event.title}</CardTitle>
+                <CardDescription>
+                  <div className="flex items-center justify-between">
+                    <Badge variant="outline">{event.category}</Badge>
+                    <Badge className={getStatusBadgeColor(event.status)}>
+                      {event.status.charAt(0).toUpperCase() + event.status.slice(1)}
+                    </Badge>
+                  </div>
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground mb-4">{event.description}</p>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="font-medium">Outcome 1:</span>
+                    <span>{event.outcome1}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="font-medium">Outcome 2:</span>
+                    <span>{event.outcome2}</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
