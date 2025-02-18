@@ -10,6 +10,7 @@ datasource db {
 }
 
 enum Role {
+  USER
   ADMIN
   OPS
   GENERAL
@@ -33,6 +34,8 @@ model User {
   image         String?
   accounts      Account[]
   sessions      Session[]
+  events        Event[]   @relation("UserEvents")
+  votes         Vote[]    @relation("UserVotes")
 }
 
 model Account {
@@ -68,4 +71,38 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
-} 
+}
+
+model Vote {
+  id        String   @id @default(cuid())
+  eventId   String
+  userId    String
+  outcome   String   // 'outcome1' or 'outcome2'
+  event     Event    @relation("EventVotes", fields: [eventId], references: [id], onDelete: Cascade)
+  user      User     @relation("UserVotes", fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([eventId, userId]) // Ensures one vote per user per event
+}
+
+model Event {
+  id                String   @id @default(cuid())
+  title             String
+  description       String
+  category          String
+  outcome1          String
+  outcome2          String
+  resolutionSource  String?
+  resolutionDateTime DateTime
+  status            String   @default("pending")
+  outcome1Votes     Int      @default(0)
+  outcome2Votes     Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  userId            String
+  user              User     @relation("UserEvents", fields: [userId], references: [id])
+  votes             Vote[]   @relation("EventVotes")
+
+  @@unique([title, category])
+}

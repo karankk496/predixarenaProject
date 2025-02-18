@@ -1,62 +1,327 @@
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
+'use client';
 
-// This would typically come from an API call
-const events = [
-  { id: 1, title: "2024 US Presidential Election", category: "Politics", status: "PENDING" },
-  { id: 2, title: "World Cup 2026 Winner", category: "Sports", status: "APPROVED" },
-  { id: 3, title: "Next iPhone Release Date", category: "Technology", status: "ACTIVE" },
-  { id: 4, title: "Oscar Best Picture 2025", category: "Entertainment", status: "RESOLVED" },
-]
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Loader2, Filter } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { toast } from "@/components/ui/use-toast";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+interface Event {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  outcome1: string;
+  outcome2: string;
+  status: string;
+  resolutionSource: string;
+  resolutionDateTime: string;
+  createdAt: string;
+}
+
+const STATUS_FILTERS = [
+  { value: "all", label: "All Events" },
+  { value: "approved", label: "Approved Events" },
+  { value: "rejected", label: "Rejected Events" },
+  { value: "pending", label: "Pending Events" }
+] as const;
+
+const categories = [
+  "All",
+  "Creators",
+  "Sports",
+  "GlobalElections",
+  "Mentions",
+  "Politics",
+  "Crypto",
+  "PopCulture",
+  "Business",
+  "Science",
+] as const;
+
+const statuses = ["All", "approved", "rejected", "pending"] as const;
 
 export default function EventsPage() {
+  const [events, setEvents] = useState<Event[]>([]);
+  const [filteredEvents, setFilteredEvents] = useState<Event[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string>("All");
+  const [selectedStatus, setSelectedStatus] = useState<string>("All");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+
+  const fetchAllEvents = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch('/api/events');
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch events');
+      }
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setEvents(data.events);
+      } else {
+        throw new Error(data.error || 'Failed to fetch events');
+      }
+    } catch (error) {
+      console.error('Error fetching events:', error);
+      setError(error instanceof Error ? error.message : 'Failed to fetch events');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVote = async (eventId: string, outcome: 'outcome1' | 'outcome2') => {
+    try {
+      const response = await fetch('/api/votes', {  // Updated endpoint
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          eventId,
+          outcome,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to vote');
+      }
+
+      toast.success('Vote recorded successfully');
+      await fetchAllEvents();
+    } catch (error) {
+      console.error('Vote error:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to vote');
+    }
+  };
+
+  const handleEventAction = async (eventId: string, action: 'approve' | 'reject') => {
+    try {
+      const response = await fetch('/api/events', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ eventId, action }),
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        toast({
+          title: "Success",
+          description: result.message,
+        });
+        fetchAllEvents(); // Refresh the events list
+      } else {
+        throw new Error(result.error);
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : 'Failed to update event',
+        variant: "destructive",
+      });
+    }
+  };
+
+  const checkVoteStatus = async (eventId: string) => {
+    try {
+      const response = await fetch('/api/votes/status', {  // Updated endpoint
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          eventId,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to check vote status');
+      }
+
+      return data.hasVoted;
+    } catch (error) {
+      console.error('Vote status check error:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to check vote status');
+      return false;
+    }
+  };
+
+  const renderEventActions = (event: Event) => {
+    if (event.status === 'pending') {
+      return (
+        <div className="flex gap-2 mt-4">
+          <Button
+            onClick={() => handleEventAction(event.id, 'approve')}
+            variant="outline"
+            className="bg-green-100 hover:bg-green-200"
+          >
+            Approve
+          </Button>
+          <Button
+            onClick={() => handleEventAction(event.id, 'reject')}
+            variant="outline"
+            className="bg-red-100 hover:bg-red-200"
+          >
+            Reject
+          </Button>
+        </div>
+      );
+    }
+    return null;
+  };
+
+  useEffect(() => {
+    fetchAllEvents();
+  }, []);
+
+  useEffect(() => {
+    filterEvents();
+  }, [events, statusFilter]);
+
+  const filterEvents = () => {
+    let filtered = [...events];
+
+    // Apply status filter
+    if (statusFilter !== "all") {
+      filtered = filtered.filter(event => 
+        event.status.toLowerCase() === statusFilter.toLowerCase()
+      );
+    }
+
+    // Sort by creation date (newest first)
+    filtered.sort((a, b) => 
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+
+    setFilteredEvents(filtered);
+  };
+
+  const getStatusBadgeColor = (status: string) => {
+    switch (status.toLowerCase()) {
+      case 'approved':
+        return 'bg-green-100 text-green-800';
+      case 'rejected':
+        return 'bg-red-100 text-red-800';
+      default:
+        return 'bg-yellow-100 text-yellow-800';
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="container mx-auto py-10">
+        <div className="text-red-600 text-center">
+          <p>{error}</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="container mx-auto py-10">
-      <div className="flex justify-between items-center mb-5">
-        <h1 className="text-2xl font-bold">All Events</h1>
-        <Link href="/" className="text-sm text-primary hover:text-primary/90">
-          ← Back to main page
+      <div className="flex justify-between items-center mb-6">
+        <div className="flex items-center gap-4">
+          <h1 className="text-2xl font-bold">All Events</h1>
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 text-muted-foreground" />
+            <Select
+              value={statusFilter}
+              onValueChange={setStatusFilter}
+            >
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Filter by status" />
+              </SelectTrigger>
+              <SelectContent>
+                {STATUS_FILTERS.map(({ value, label }) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <Link href="/events/create">
+          <Button>Create New Event</Button>
         </Link>
       </div>
-      <div className="mb-5">
-        <Button asChild>
-          <Link href="/events/create">Create New Event</Link>
-        </Button>
+
+      <div className="mb-4">
+        <p className="text-sm text-muted-foreground">
+          Showing {filteredEvents.length} {statusFilter !== "all" ? statusFilter : ""} events
+        </p>
       </div>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Title</TableHead>
-            <TableHead>Category</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {events.map((event) => (
-            <TableRow key={event.id}>
-              <TableCell>{event.title}</TableCell>
-              <TableCell>{event.category}</TableCell>
-              <TableCell>
-                <Badge variant={event.status === "APPROVED" ? "success" : "secondary"}>{event.status}</Badge>
-              </TableCell>
-              <TableCell>
-                <Button asChild variant="link">
-                  <Link href={`/events/${event.id}`}>View</Link>
-                </Button>
-                {event.status === "PENDING" && (
-                  <Button asChild variant="link">
-                    <Link href={`/events/${event.id}/edit`}>Edit</Link>
-                  </Button>
-                )}
-              </TableCell>
-            </TableRow>
+
+      {filteredEvents.length === 0 ? (
+        <Card>
+          <CardContent className="p-6">
+            <p className="text-center text-muted-foreground">
+              No {statusFilter !== "all" ? statusFilter : ""} events found
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {filteredEvents.map((event) => (
+            <Card key={event.id} className="shadow-sm">
+              <CardHeader>
+                <CardTitle>{event.title}</CardTitle>
+                <CardDescription>
+                  <div className="flex items-center justify-between">
+                    <Badge variant="outline">{event.category}</Badge>
+                    <Badge className={getStatusBadgeColor(event.status)}>
+                      {event.status.charAt(0).toUpperCase() + event.status.slice(1)}
+                    </Badge>
+                  </div>
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground mb-4">{event.description}</p>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="font-medium">Outcome 1:</span>
+                    <span>{event.outcome1}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="font-medium">Outcome 2:</span>
+                    <span>{event.outcome2}</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           ))}
-        </TableBody>
-      </Table>
+        </div>
+      )}
     </div>
-  )
+  );
 }
 

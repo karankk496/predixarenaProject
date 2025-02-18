@@ -1,30 +1,54 @@
 import { NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
-import jwt from 'jsonwebtoken'
+import * as jose from 'jose'
 import { prisma } from '@/lib/prisma'
+import { Prisma, Role } from '@prisma/client'
+
+interface RegisterPayload {
+  email: string;
+  password: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  displayName?: string | null;
+  phoneNumber?: string | null;
+  dateOfBirth?: string | null;
+  gender?: string | null;
+}
 
 export async function POST(req: Request) {
+  let client;
   try {
-    const { 
-      email, 
-      password,
-      firstName,
-      lastName,
-      displayName,
-      phoneNumber,
-      dateOfBirth,
-      gender 
-    } = await req.json()
+    // Initialize Prisma client
+    client = prisma;
+    await client.$connect();
 
-    if (!email || !password) {
+    const body = await req.json() as RegisterPayload
+
+    if (!body.email || !body.password) {
       return NextResponse.json(
         { error: 'Email and password are required' },
         { status: 400 }
       )
     }
 
-    const existingUser = await prisma.user.findUnique({
-      where: { email }
+    // Validate email format
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email)) {
+      return NextResponse.json(
+        { error: 'Invalid email format' },
+        { status: 400 }
+      )
+    }
+
+    // Validate password strength
+    if (body.password.length < 6) {
+      return NextResponse.json(
+        { error: 'Password must be at least 6 characters long' },
+        { status: 400 }
+      )
+    }
+
+    const existingUser = await client.user.findUnique({
+      where: { email: body.email }
     })
 
     if (existingUser) {
@@ -34,33 +58,41 @@ export async function POST(req: Request) {
       )
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10)
+    const hashedPassword = await bcrypt.hash(body.password, 12)
 
-    const user = await prisma.user.create({
+    const user = await client.user.create({
       data: {
-        email,
+        email: body.email,
         password: hashedPassword,
-        role: 'GENERAL',
+        role: 'GENERAL' as Role,
         isSuperUser: false,
-        firstName: firstName || null,
-        lastName: lastName || null,
-        displayName: displayName || null,
-        phoneNumber: phoneNumber || null,
-        dateOfBirth: dateOfBirth || null,
-        gender: gender || null,
+        firstName: body.firstName || null,
+        lastName: body.lastName || null,
+        displayName: body.displayName || null,
+        phoneNumber: body.phoneNumber || null,
+        dateOfBirth: body.dateOfBirth || null,
+        gender: body.gender || null
       }
     })
 
-    const token = jwt.sign(
-      { 
-        userId: user.id,
-        email: user.email,
-        role: user.role,
-        isSuperUser: user.isSuperUser
-      },
-      process.env.JWT_SECRET!,
-      { expiresIn: '24h' }
-    )
+    if (!user?.id) {
+      throw new Error('Failed to create user')
+    }
+
+    // Create JWT token
+    const secret = new TextEncoder().encode(process.env.JWT_SECRET || 'fallback-secret-key')
+    const alg = 'HS256'
+    const jwt = await new jose.SignJWT({
+      sub: user.id,
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+      isSuperUser: user.isSuperUser
+    })
+      .setProtectedHeader({ alg })
+      .setIssuedAt()
+      .setExpirationTime('24h')
+      .sign(secret)
 
     const { password: _, ...userWithoutPassword } = user
 
@@ -68,14 +100,26 @@ export async function POST(req: Request) {
       success: true,
       message: 'Registration successful',
       user: userWithoutPassword,
-      token
+      token: jwt
     }, { status: 201 })
 
   } catch (error) {
     console.error('Registration error:', error)
+    
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      return NextResponse.json(
+        { error: `Database error: ${error.message}` },
+        { status: 500 }
+      )
+    }
+
     return NextResponse.json(
       { error: 'Registration failed. Please try again.' },
       { status: 500 }
     )
+  } finally {
+    if (client) {
+      await client.$disconnect()
+    }
   }
 } 

@@ -82,25 +82,31 @@ export default function RegisterPage() {
     setFormError(null)
 
     try {
+      if (!navigator.onLine) {
+        throw new Error('No internet connection')
+      }
+
       const response = await fetch('/api/auth/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json'
         },
         body: JSON.stringify(data),
       })
 
-      const result = await response.json()
-
       if (!response.ok) {
-        throw new Error(result.error || 'Registration failed')
+        const errorData = await response.json().catch(() => ({
+          error: `HTTP error! status: ${response.status}`
+        }))
+        throw new Error(errorData.error || 'Registration failed')
       }
 
-      // Show success message
+      const result = await response.json()
+
       setSnackbarMessage(`Account created successfully! Please login to continue.`)
       setOpenSnackbar(true)
       
-      // Redirect to login page after showing message
       setTimeout(() => {
         router.push('/login')
       }, 2000)

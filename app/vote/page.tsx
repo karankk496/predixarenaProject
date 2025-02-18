@@ -1,205 +1,318 @@
-"use client"
+'use client';
 
-import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
-import { Progress } from "@/components/ui/progress"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Loader2 } from "lucide-react"
+import { useEffect, useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Loader2, Filter } from "lucide-react";
+import { useToast } from "@/components/ui/use-toast";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { formatDistanceToNow, isPast } from 'date-fns';
 
-// This would typically come from an API call
-const mockQuestions = [
-  {
-    id: 1,
-    title: "2024 US Presidential Election",
-    description: "Who will win the 2024 US Presidential Election?",
-    options: [
-      { id: 1, text: "Democratic Party", votes: 480 },
-      { id: 2, text: "Republican Party", votes: 450 },
-      { id: 3, text: "Other", votes: 70 },
-    ],
-    totalVotes: 1000,
-  },
-  {
-    id: 2,
-    title: "Next iPhone Release Date",
-    description: "When will Apple release the next iPhone?",
-    options: [
-      { id: 1, text: "September 2023", votes: 750 },
-      { id: 2, text: "October 2023", votes: 200 },
-      { id: 3, text: "November 2023", votes: 50 },
-    ],
-    totalVotes: 1000,
-  },
-  {
-    id: 3,
-    title: "Cryptocurrency Market Cap",
-    description: "Will the total cryptocurrency market cap exceed $3 trillion in 2023?",
-    options: [
-      { id: 1, text: "Yes", votes: 600 },
-      { id: 2, text: "No", votes: 400 },
-    ],
-    totalVotes: 1000,
-  },
-  {
-    id: 4,
-    title: "AI Breakthrough",
-    description: "Will there be a major AI breakthrough in natural language understanding in 2023?",
-    options: [
-      { id: 1, text: "Yes", votes: 800 },
-      { id: 2, text: "No", votes: 200 },
-    ],
-    totalVotes: 1000,
-  },
-]
-
-type Question = {
-  id: number
-  title: string
-  description: string
-  options: { id: number; text: string; votes: number }[]
-  totalVotes: number
+interface Event {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  outcome1: string;
+  outcome2: string;
+  status: string;
+  resolutionSource: string;
+  resolutionDateTime: string;
+  outcome1Votes: number;
+  outcome2Votes: number;
+  createdAt: string;
 }
 
+interface Vote {
+  eventId: string;
+  outcome: 'outcome1' | 'outcome2';
+  userId: string;
+}
+
+const CATEGORY_FILTERS = [
+  { value: "all", label: "All Categories" },
+  { value: "Creators", label: "Creators" },
+  { value: "Sports", label: "Sports" },
+  { value: "GlobalElections", label: "Global Elections" },
+  { value: "Politics", label: "Politics" },
+  { value: "Crypto", label: "Crypto" },
+  { value: "Business", label: "Business" },
+  { value: "Science", label: "Science" },
+] as const;
+
 export default function VotePage() {
-  const [questions, setQuestions] = useState<Question[]>([])
-  const [userVotes, setUserVotes] = useState<{ [key: number]: number }>({})
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [submitting, setSubmitting] = useState(false)
-  const router = useRouter()
+  const { toast } = useToast();
+  const [events, setEvents] = useState<Event[]>([]);
+  const [filteredEvents, setFilteredEvents] = useState<Event[]>([]);
+  const [userVotes, setUserVotes] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
 
   useEffect(() => {
-    // This would typically be an API call
-    const fetchQuestions = async () => {
-      try {
-        // Simulate API delay
-        await new Promise((resolve) => setTimeout(resolve, 1000))
-        setQuestions(mockQuestions)
-        setLoading(false)
-      } catch (err) {
-        setError("Failed to load questions. Please try again later.")
-        setLoading(false)
-      }
+    fetchApprovedEvents();
+    fetchUserVotes();
+  }, []);
+
+  useEffect(() => {
+    filterEvents();
+  }, [events, categoryFilter]);
+
+  const filterEvents = () => {
+    let filtered = [...events];
+
+    if (categoryFilter !== "all") {
+      filtered = filtered.filter(event => 
+        event.category === categoryFilter
+      );
     }
 
-    fetchQuestions()
-  }, [])
+    filtered.sort((a, b) => 
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
 
-  const handleVote = (questionId: number, optionId: number) => {
-    setUserVotes((prevVotes) => ({
-      ...prevVotes,
-      [questionId]: optionId,
-    }))
-  }
+    setFilteredEvents(filtered);
+  };
 
-  const handleSubmit = async () => {
-    setSubmitting(true)
+  const fetchApprovedEvents = async () => {
     try {
-      // This would typically be an API call to submit votes
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-
-      // Update local state to reflect submitted votes
-      setQuestions((prevQuestions) =>
-        prevQuestions.map((q) => ({
-          ...q,
-          options: q.options.map((o) => ({
-            ...o,
-            votes: o.votes + (userVotes[q.id] === o.id ? 1 : 0),
-          })),
-          totalVotes: q.totalVotes + (userVotes[q.id] ? 1 : 0),
-        })),
-      )
-
-      // Clear user votes after submission
-      setUserVotes({})
-      setSubmitting(false)
-    } catch (err) {
-      setError("Failed to submit votes. Please try again.")
-      setSubmitting(false)
+      setLoading(true);
+      const response = await fetch('/api/events?status=approved');
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch approved events');
+      }
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setEvents(data.events);
+      } else {
+        throw new Error(data.error || 'Failed to fetch events');
+      }
+    } catch (error) {
+      console.error('Error fetching events:', error);
+      setError(error instanceof Error ? error.message : 'Failed to fetch events');
+    } finally {
+      setLoading(false);
     }
-  }
+  };
+
+  const fetchUserVotes = async () => {
+    try {
+      const response = await fetch('/api/votes/user?userId=anonymous');
+      if (response.ok) {
+        const data = await response.json();
+        const votesMap: Record<string, string> = {};
+        data.votes.forEach((vote: Vote) => {
+          votesMap[vote.eventId] = vote.outcome;
+        });
+        setUserVotes(votesMap);
+      }
+    } catch (error) {
+      console.error('Error fetching user votes:', error);
+    }
+  };
+
+  const handleVote = async (eventId: string, outcome: 'outcome1' | 'outcome2') => {
+    try {
+      if (userVotes[eventId] === outcome) {
+        return;
+      }
+
+      const response = await fetch('/api/votes', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          eventId,
+          outcome,
+          userId: 'anonymous'
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to vote');
+      }
+
+      setUserVotes(prev => ({
+        ...prev,
+        [eventId]: outcome
+      }));
+
+      setEvents(prevEvents => 
+        prevEvents.map(event => {
+          if (event.id === eventId) {
+            const prevOutcome = userVotes[eventId];
+            return {
+              ...event,
+              outcome1Votes: event.outcome1Votes + (
+                outcome === 'outcome1' ? 1 : 0
+              ) - (prevOutcome === 'outcome1' ? 1 : 0),
+              outcome2Votes: event.outcome2Votes + (
+                outcome === 'outcome2' ? 1 : 0
+              ) - (prevOutcome === 'outcome2' ? 1 : 0)
+            };
+          }
+          return event;
+        })
+      );
+
+      toast({
+        title: "Success",
+        description: userVotes[eventId] 
+          ? "Vote updated successfully" 
+          : "Vote recorded successfully",
+      });
+    } catch (error) {
+      console.error('Vote error:', error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : 'Failed to vote',
+        variant: "destructive",
+      });
+    }
+  };
+
+  const isEventEnded = (resolutionDateTime: string) => {
+    return isPast(new Date(resolutionDateTime));
+  };
+
+  const getTimeRemaining = (resolutionDateTime: string) => {
+    return formatDistanceToNow(new Date(resolutionDateTime), { addSuffix: true });
+  };
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-screen">
+      <div className="flex justify-center items-center min-h-screen">
         <Loader2 className="h-8 w-8 animate-spin" />
       </div>
-    )
+    );
   }
 
   if (error) {
     return (
       <div className="container mx-auto py-10">
-        <Alert variant="destructive">
-          <AlertTitle>Error</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
+        <div className="text-red-600 text-center">
+          <p>{error}</p>
+        </div>
       </div>
-    )
+    );
   }
 
   return (
     <div className="container mx-auto py-10">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Vote on Predictions</h1>
-        <Button variant="outline" onClick={() => router.push("/")}>
-          Back to Home
-        </Button>
+        <div className="flex items-center gap-4">
+          <h1 className="text-2xl font-bold">Vote on Predictions</h1>
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 text-muted-foreground" />
+            <Select
+              value={categoryFilter}
+              onValueChange={setCategoryFilter}
+            >
+              <SelectTrigger className="w-[160px]">
+                <SelectValue placeholder="Filter by Category" />
+              </SelectTrigger>
+              <SelectContent>
+                {CATEGORY_FILTERS.map(({ value, label }) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        {questions.map((question) => (
-          <Card key={question.id} className="flex flex-col h-full">
-            <CardHeader>
-              <CardTitle className="text-lg">{question.title}</CardTitle>
-              <CardDescription>{question.description}</CardDescription>
-            </CardHeader>
-            <CardContent className="flex-grow">
-              <div className="space-y-2">
-                {question.options.map((option) => {
-                  const percentage = (option.votes / question.totalVotes) * 100
-                  return (
-                    <div key={option.id} className="space-y-1">
-                      <div className="flex justify-between items-center text-sm">
-                        <span>{option.text}</span>
-                        <span>{percentage.toFixed(1)}%</span>
-                      </div>
-                      <Progress value={percentage} className="h-2" />
-                      <Button
-                        onClick={() => handleVote(question.id, option.id)}
-                        variant={userVotes[question.id] === option.id ? "default" : "outline"}
-                        size="sm"
-                        className="w-full mt-1"
-                      >
-                        {userVotes[question.id] === option.id ? "Selected" : "Select"}
-                      </Button>
+      <div className="mb-4">
+        <p className="text-sm text-muted-foreground">
+          Showing {filteredEvents.length} approved predictions
+          {categoryFilter !== "all" ? ` in ${categoryFilter}` : ""}
+        </p>
+      </div>
+
+      {filteredEvents.length === 0 ? (
+        <Card>
+          <CardContent className="p-6">
+            <p className="text-center text-muted-foreground">
+              No approved predictions found
+              {categoryFilter !== "all" ? ` in ${categoryFilter}` : ""}
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {filteredEvents.map((event) => {
+            const hasVoted = userVotes[event.id];
+            const eventEnded = isEventEnded(event.resolutionDateTime);
+            
+            return (
+              <Card key={event.id} className="shadow-sm">
+                <CardHeader>
+                  <CardTitle>{event.title}</CardTitle>
+                  <CardDescription>
+                    <div className="flex flex-col gap-2">
+                      <Badge variant="outline">{event.category}</Badge>
+                      <p className="text-sm">
+                        {eventEnded 
+                          ? "Event has ended"
+                          : `Ends ${getTimeRemaining(event.resolutionDateTime)}`
+                        }
+                      </p>
                     </div>
-                  )
-                })}
-              </div>
-            </CardContent>
-            <CardFooter>
-              <p className="text-sm text-muted-foreground">Total votes: {question.totalVotes}</p>
-            </CardFooter>
-          </Card>
-        ))}
-      </div>
-
-      <div className="flex justify-center">
-        <Button onClick={handleSubmit} disabled={submitting || Object.keys(userVotes).length === 0}>
-          {submitting ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Submitting Votes...
-            </>
-          ) : (
-            "Submit Votes"
-          )}
-        </Button>
-      </div>
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground mb-4">{event.description}</p>
+                  <div className="space-y-2">
+                    {!eventEnded && (
+                      <div className="mt-4 space-y-2">
+                        <Button 
+                          onClick={() => handleVote(event.id, 'outcome1')} 
+                          className={`w-full mb-2`}
+                          variant={hasVoted === 'outcome1' ? "default" : "outline"}
+                          disabled={eventEnded}
+                        >
+                          {hasVoted === 'outcome1' && '✓ '}
+                          {event.outcome1} ({event.outcome1Votes})
+                        </Button>
+                        <Button 
+                          onClick={() => handleVote(event.id, 'outcome2')} 
+                          className={`w-full`}
+                          variant={hasVoted === 'outcome2' ? "default" : "outline"}
+                          disabled={eventEnded}
+                        >
+                          {hasVoted === 'outcome2' && '✓ '}
+                          {event.outcome2} ({event.outcome2Votes})
+                        </Button>
+                      </div>
+                    )}
+                    {eventEnded && (
+                      <div className="mt-4">
+                        <p className="text-center text-muted-foreground">
+                          Voting is closed
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
     </div>
-  )
-}
-
+  );
+} 
