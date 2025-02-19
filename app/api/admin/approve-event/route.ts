@@ -1,10 +1,43 @@
 import { prisma } from "@/lib/prisma"
 import { NextResponse } from "next/server"
 import { Prisma } from "@prisma/client"
+import { headers } from 'next/headers'
+import jwt from 'jsonwebtoken'
+
+const JWT_SECRET = process.env.JWT_SECRET || process.env.NEXTAUTH_SECRET
+
+async function verifyAdminAccess() {
+  try {
+    const headersList = headers()
+    const authHeader = headersList.get('authorization')
+    
+    if (!authHeader?.startsWith('Bearer ')) {
+      return false
+    }
+
+    const token = authHeader.split(' ')[1]
+    const decoded = jwt.verify(token, JWT_SECRET as string) as any
+
+    // Check if user has admin role or is superuser
+    return decoded.role === 'ADMIN' || decoded.isSuperUser === true
+  } catch (error) {
+    console.error('Admin verification error:', error)
+    return false
+  }
+}
 
 export async function GET() {
   try {
-    console.log('Fetching all events for approval...');
+    // Verify admin access using token
+    const isAdmin = await verifyAdminAccess()
+    if (!isAdmin) {
+      return NextResponse.json(
+        { error: 'Forbidden: Admin access required' },
+        { status: 403 }
+      )
+    }
+
+    console.log('Fetching all events for approval...')
     const allEvents = await prisma.event.findMany({
       where: {
         status: "pending"
@@ -15,17 +48,15 @@ export async function GET() {
       include: {
         votes: true
       }
-    });
-
-    console.log(`Found ${allEvents.length} events`);
+    })
 
     return NextResponse.json({
       success: true,
       data: allEvents,
       total: allEvents.length
-    });
+    })
   } catch (error) {
-    console.error('Error fetching events:', error);
+    console.error('Error fetching events:', error)
     return NextResponse.json(
       {
         success: false,
@@ -34,13 +65,22 @@ export async function GET() {
         total: 0
       },
       { status: 500 }
-    );
+    )
   }
 }
 
-export async function POST(req: Request) {
+export async function POST(request: Request) {
   try {
-    const { eventId, status } = await req.json()
+    // Verify admin access using token
+    const isAdmin = await verifyAdminAccess()
+    if (!isAdmin) {
+      return NextResponse.json(
+        { error: 'Forbidden: Admin access required' },
+        { status: 403 }
+      )
+    }
+
+    const { eventId, status } = await request.json()
 
     if (!eventId || !status) {
       return NextResponse.json(
@@ -55,8 +95,6 @@ export async function POST(req: Request) {
         id: eventId,
       },
     })
-
-    console.log('Existing event:', existingEvent)
 
     if (!existingEvent) {
       return NextResponse.json(
@@ -76,46 +114,59 @@ export async function POST(req: Request) {
       },
     })
 
-    console.log(`Successfully ${status} event:`, event)
-    
     return NextResponse.json({ 
       success: true,
       event,
       message: `Event ${status} successfully`
     })
   } catch (error) {
-    // Enhanced error logging
-    console.error('Error details:', {
-      name: error.name,
-      message: error.message,
-      stack: error.stack,
-      error,
-    })
-
-    // Handle Prisma-specific errors
+    console.error('Error updating event:', error)
+    
+    // Handle Prisma errors
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
-      console.error('Prisma error code:', error.code)
-      return NextResponse.json(
-        { 
-          error: "Database error", 
-          code: error.code,
-          message: error.message 
-        },
-        { status: 500 }
-      )
+      // Handle specific Prisma error codes
+      switch (error.code) {
+        case 'P2025':
+          return NextResponse.json(
+            { 
+              success: false,
+              error: 'Record not found',
+              message: 'The event you are trying to update does not exist'
+            },
+            { status: 404 }
+          )
+        case 'P2002':
+          return NextResponse.json(
+            { 
+              success: false,
+              error: 'Unique constraint violation',
+              message: 'This event status has already been updated'
+            },
+            { status: 409 }
+          )
+        default:
+          return NextResponse.json(
+            { 
+              success: false,
+              error: 'Database error',
+              message: 'An error occurred while updating the event'
+            },
+            { status: 500 }
+          )
+      }
     }
 
+    // Handle other errors
     return NextResponse.json(
       { 
         success: false,
-        error: "Failed to update event",
-        details: error instanceof Error ? error.message : "Unknown error",
-        type: error.constructor.name
+        error: 'Failed to update event',
+        message: error instanceof Error ? error.message : 'Unknown error'
       },
       { status: 500 }
     )
   }
 }
 
-export const dynamic = 'force-dynamic';
-export const revalidate = 0; 
+export const dynamic = 'force-dynamic'
+export const revalidate = 0

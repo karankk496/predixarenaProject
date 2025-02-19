@@ -14,6 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import jwt from 'jsonwebtoken';
 
 interface Event {
   id: string;
@@ -63,7 +64,18 @@ export default function EventsPage() {
   const fetchAllEvents = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/events');
+      const token = localStorage.getItem('token');
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json'
+      };
+      
+      if (token) {
+        headers['Authorization'] = `Bearer ${token.trim()}`;
+      }
+      
+      const response = await fetch('/api/events', {
+        headers
+      });
       
       if (!response.ok) {
         throw new Error('Failed to fetch events');
@@ -86,39 +98,53 @@ export default function EventsPage() {
 
   const handleVote = async (eventId: string, outcome: 'outcome1' | 'outcome2') => {
     try {
-      const response = await fetch('/api/votes', {  // Updated endpoint
+      const token = localStorage.getItem('token')
+      if (!token) {
+        toast.error('Please login to vote')
+        return
+      }
+
+      const response = await fetch('/api/votes', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token.trim()}`
         },
         body: JSON.stringify({
           eventId,
           outcome,
         }),
-      });
+      })
 
-      const data = await response.json();
+      const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to vote');
+        throw new Error(data.error || 'Failed to vote')
       }
 
-      toast.success('Vote recorded successfully');
-      await fetchAllEvents();
+      toast.success(data.message || 'Vote recorded successfully')
+      await fetchAllEvents()
     } catch (error) {
-      console.error('Vote error:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to vote');
+      console.error('Vote error:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to vote')
     }
   };
 
   const handleEventAction = async (eventId: string, action: 'approve' | 'reject') => {
     try {
-      const response = await fetch('/api/events', {
-        method: 'PATCH',
+      const token = localStorage.getItem('token');
+      if (!token) {
+        toast.error('Authorization required');
+        return;
+      }
+
+      const response = await fetch('/api/admin/approve-event', {
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token.trim()}`
         },
-        body: JSON.stringify({ eventId, action }),
+        body: JSON.stringify({ eventId, status: action === 'approve' ? 'approved' : 'rejected' }),
       });
 
       const result = await response.json();
@@ -126,7 +152,7 @@ export default function EventsPage() {
       if (result.success) {
         toast({
           title: "Success",
-          description: result.message,
+          description: `Event ${action}ed successfully`,
         });
         fetchAllEvents(); // Refresh the events list
       } else {
@@ -143,50 +169,58 @@ export default function EventsPage() {
 
   const checkVoteStatus = async (eventId: string) => {
     try {
-      const response = await fetch('/api/votes/status', {  // Updated endpoint
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          eventId,
-        }),
-      });
+      const token = localStorage.getItem('token')
+      if (!token) return false
 
-      const data = await response.json();
+      const response = await fetch(`/api/votes?eventId=${eventId}`, {
+        headers: {
+          'Authorization': `Bearer ${token.trim()}`
+        }
+      })
+
+      const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to check vote status');
+        throw new Error(data.error || 'Failed to check vote status')
       }
 
-      return data.hasVoted;
+      return data.hasVoted
     } catch (error) {
-      console.error('Vote status check error:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to check vote status');
-      return false;
+      console.error('Vote status check error:', error)
+      return false
     }
   };
 
   const renderEventActions = (event: Event) => {
-    if (event.status === 'pending') {
-      return (
-        <div className="flex gap-2 mt-4">
-          <Button
-            onClick={() => handleEventAction(event.id, 'approve')}
-            variant="outline"
-            className="bg-green-100 hover:bg-green-200"
-          >
-            Approve
-          </Button>
-          <Button
-            onClick={() => handleEventAction(event.id, 'reject')}
-            variant="outline"
-            className="bg-red-100 hover:bg-red-200"
-          >
-            Reject
-          </Button>
-        </div>
-      );
+    const token = localStorage.getItem('token');
+    if (!token) return null;
+    
+    try {
+      const decoded = jwt.verify(token, process.env.NEXT_PUBLIC_JWT_SECRET as string) as any;
+      const isAdmin = decoded.role === 'ADMIN' || decoded.isSuperUser === true;
+      
+      if (isAdmin && event.status === 'pending') {
+        return (
+          <div className="flex gap-2 mt-4">
+            <Button
+              onClick={() => handleEventAction(event.id, 'approve')}
+              variant="outline"
+              className="bg-green-100 hover:bg-green-200"
+            >
+              Approve
+            </Button>
+            <Button
+              onClick={() => handleEventAction(event.id, 'reject')}
+              variant="outline"
+              className="bg-red-100 hover:bg-red-200"
+            >
+              Reject
+            </Button>
+          </div>
+        );
+      }
+    } catch (error) {
+      return null;
     }
     return null;
   };
@@ -315,7 +349,11 @@ export default function EventsPage() {
                     <span className="font-medium">Outcome 2:</span>
                     <span>{event.outcome2}</span>
                   </div>
+                  <div className="text-sm text-muted-foreground">
+                    Created: {new Date(event.createdAt).toLocaleDateString()}
+                  </div>
                 </div>
+                {renderEventActions(event)}
               </CardContent>
             </Card>
           ))}
@@ -324,4 +362,3 @@ export default function EventsPage() {
     </div>
   );
 }
-

@@ -26,6 +26,29 @@ const VALID_CATEGORIES = [
 
 export async function GET(request: Request) {
   try {
+    // Get and verify token
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
+
+    const token = authHeader.replace('Bearer ', '')
+    const secret = new TextEncoder().encode(process.env.JWT_SECRET || 'karansingh')
+
+    let payload;
+    try {
+      const verified = await jose.jwtVerify(token, secret)
+      payload = verified.payload
+    } catch (error) {
+      return NextResponse.json(
+        { error: 'Invalid token' },
+        { status: 401 }
+      )
+    }
+
     // Get the status from URL query parameters
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
@@ -179,5 +202,3 @@ export async function POST(req: Request) {
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
-
-

@@ -84,10 +84,24 @@ export default function VotePage() {
   const fetchApprovedEvents = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/events?status=approved');
+      const token = localStorage.getItem('token')
+      if (!token) {
+        toast.error('Please login to view events')
+        return
+      }
+
+      const response = await fetch('/api/events?status=approved', {
+        headers: {
+          'Authorization': `Bearer ${token.trim()}`
+        }
+      });
       
       if (!response.ok) {
-        throw new Error('Failed to fetch approved events');
+        if (response.status === 401) {
+          toast.error('Please login to view events')
+          return
+        }
+        throw new Error('Failed to fetch approved events')
       }
       
       const data = await response.json();
@@ -107,9 +121,22 @@ export default function VotePage() {
 
   const fetchUserVotes = async () => {
     try {
-      const response = await fetch('/api/votes/user?userId=anonymous');
-      if (response.ok) {
-        const data = await response.json();
+      const token = localStorage.getItem('token')
+      if (!token) return
+
+      const response = await fetch('/api/votes?all=true', {
+        headers: {
+          'Authorization': `Bearer ${token.trim()}`
+        }
+      });
+
+      if (!response.ok) {
+        if (response.status === 401) return
+        throw new Error('Failed to fetch user votes')
+      }
+
+      const data = await response.json();
+      if (data.success) {
         const votesMap: Record<string, string> = {};
         data.votes.forEach((vote: Vote) => {
           votesMap[vote.eventId] = vote.outcome;
@@ -123,46 +150,61 @@ export default function VotePage() {
 
   const handleVote = async (eventId: string, outcome: 'outcome1' | 'outcome2') => {
     try {
+      const token = localStorage.getItem('token')
+      if (!token) {
+        toast.error('Please login to vote')
+        return
+      }
+
       if (userVotes[eventId] === outcome) {
-        return;
+        return
       }
 
       const response = await fetch('/api/votes', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token.trim()}`
         },
         body: JSON.stringify({
           eventId,
-          outcome,
-          userId: 'anonymous'
+          outcome
         }),
       });
 
       const data = await response.json();
 
       if (!response.ok) {
+        if (response.status === 401) {
+          toast.error('Please login to vote')
+          return
+        }
         throw new Error(data.error || 'Failed to vote');
       }
 
+      // Update local state
       setUserVotes(prev => ({
         ...prev,
         [eventId]: outcome
       }));
 
+      // Update event vote counts
       setEvents(prevEvents => 
         prevEvents.map(event => {
           if (event.id === eventId) {
             const prevOutcome = userVotes[eventId];
-            return {
-              ...event,
-              outcome1Votes: event.outcome1Votes + (
-                outcome === 'outcome1' ? 1 : 0
-              ) - (prevOutcome === 'outcome1' ? 1 : 0),
-              outcome2Votes: event.outcome2Votes + (
-                outcome === 'outcome2' ? 1 : 0
-              ) - (prevOutcome === 'outcome2' ? 1 : 0)
-            };
+            const newEvent = { ...event };
+
+            // If user hasn't voted before, just increment the new vote
+            if (!prevOutcome) {
+              newEvent[`${outcome}Votes`] = event[`${outcome}Votes`] + 1;
+            } else {
+              // If changing vote, decrement old vote and increment new vote
+              newEvent[`${prevOutcome}Votes`] = event[`${prevOutcome}Votes`] - 1;
+              newEvent[`${outcome}Votes`] = event[`${outcome}Votes`] + 1;
+            }
+
+            return newEvent;
           }
           return event;
         })
@@ -170,9 +212,7 @@ export default function VotePage() {
 
       toast({
         title: "Success",
-        description: userVotes[eventId] 
-          ? "Vote updated successfully" 
-          : "Vote recorded successfully",
+        description: data.message || "Vote recorded successfully",
       });
     } catch (error) {
       console.error('Vote error:', error);
@@ -282,20 +322,20 @@ export default function VotePage() {
                         <Button 
                           onClick={() => handleVote(event.id, 'outcome1')} 
                           className={`w-full mb-2`}
-                          variant={hasVoted === 'outcome1' ? "default" : "outline"}
+                          variant={userVotes[event.id] === 'outcome1' ? "default" : "outline"}
                           disabled={eventEnded}
                         >
-                          {hasVoted === 'outcome1' && '✓ '}
-                          {event.outcome1} ({event.outcome1Votes})
+                          {userVotes[event.id] === 'outcome1' && '✓ '}
+                          {event.outcome1} ({event.outcome1Votes || 0})
                         </Button>
                         <Button 
                           onClick={() => handleVote(event.id, 'outcome2')} 
                           className={`w-full`}
-                          variant={hasVoted === 'outcome2' ? "default" : "outline"}
+                          variant={userVotes[event.id] === 'outcome2' ? "default" : "outline"}
                           disabled={eventEnded}
                         >
-                          {hasVoted === 'outcome2' && '✓ '}
-                          {event.outcome2} ({event.outcome2Votes})
+                          {userVotes[event.id] === 'outcome2' && '✓ '}
+                          {event.outcome2} ({event.outcome2Votes || 0})
                         </Button>
                       </div>
                     )}

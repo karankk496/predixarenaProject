@@ -1,84 +1,147 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { Textarea } from "@/components/ui/textarea"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
+import { Card, CardContent } from "@/components/ui/card"
+import { Loader2 } from "lucide-react"
+import { toast } from "sonner"
+import { Badge } from "@/components/ui/badge"
 
-// This would typically come from an API call
-const pendingEvents = [
-  {
-    id: 1,
-    title: "2024 US Presidential Election",
-    description: "Predict the winner of the 2024 US Presidential Election",
-    category: "Politics",
-    createdAt: "2023-06-01",
-    outcomes: [
-      { label: "Democratic Party", probability: 48 },
-      { label: "Republican Party", probability: 48 },
-      { label: "Other", probability: 4 },
-    ],
-    resolutionSource: "https://www.example.com/election-results",
-    resolutionDateTime: "2024-11-05T23:59:59",
-  },
-  {
-    id: 2,
-    title: "Next Major Earthquake Prediction",
-    description: "Predict the location and magnitude of the next major earthquake",
-    category: "Science",
-    createdAt: "2023-06-02",
-    outcomes: [
-      { label: "Magnitude 7.0 or higher", probability: 30 },
-      { label: "Magnitude 6.0 to 6.9", probability: 50 },
-      { label: "Magnitude 5.9 or lower", probability: 20 },
-    ],
-    resolutionSource: "https://www.example.com/earthquake-data",
-    resolutionDateTime: "2023-12-31T23:59:59",
-  },
-  {
-    id: 3,
-    title: "Bitcoin Price at End of 2023",
-    description: "Predict the price range of Bitcoin at the end of 2023",
-    category: "Economics",
-    createdAt: "2023-06-03",
-    outcomes: [
-      { label: "Above $50,000", probability: 25 },
-      { label: "$30,000 - $50,000", probability: 50 },
-      { label: "Below $30,000", probability: 25 },
-    ],
-    resolutionSource: "https://www.example.com/crypto-prices",
-    resolutionDateTime: "2023-12-31T23:59:59",
-  },
-]
+// Define Event type
+interface Event {
+  id: string
+  title: string
+  description: string
+  category: string
+  createdAt: string
+  outcome1: string
+  outcome2: string
+  resolutionSource: string
+  resolutionDateTime: string
+  status: string
+}
 
 export default function ApproveEventsPage() {
-  const [events, setEvents] = useState(pendingEvents)
-  const [comments, setComments] = useState<{ [key: number]: string }>({})
-  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
+  const router = useRouter()
+  const [events, setEvents] = useState<Event[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const handleApprove = async (id: number) => {
-    // This would typically be an API call
+  useEffect(() => {
+    fetchEvents()
+  }, [])
+
+  const fetchEvents = async () => {
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1000)) // Simulating API delay
-      setEvents(events.filter((event) => event.id !== id))
-      setMessage({ type: "success", text: "Event approved successfully" })
+      setLoading(true)
+      const token = localStorage.getItem('token')
+      if (!token) {
+        toast.error('Authorization required')
+        return
+      }
+
+      const response = await fetch('/api/admin/approve-event', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token.trim()}`
+        }
+      })
+      
+      if (response.status === 403) {
+        toast.error('You do not have permission to view events')
+        router.push('/')
+        return
+      }
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch events')
+      }
+      
+      const data = await response.json()
+      console.log('API Response:', data)
+
+      if (data && Array.isArray(data)) {
+        setEvents(data)
+      } else if (data && data.success && Array.isArray(data.data)) {
+        setEvents(data.data)
+      } else {
+        setEvents([])
+        console.error('Unexpected data format:', data)
+      }
     } catch (error) {
-      setMessage({ type: "error", text: "Failed to approve event" })
+      console.error('Error:', error)
+      setError('Failed to load events')
+      setEvents([])
+    } finally {
+      setLoading(false)
     }
   }
 
-  const handleReject = async (id: number) => {
-    // This would typically be an API call
+  const handleStatusUpdate = async (eventId: string, status: 'approved' | 'rejected') => {
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1000)) // Simulating API delay
-      setEvents(events.filter((event) => event.id !== id))
-      setMessage({ type: "success", text: "Event rejected successfully" })
+      const token = localStorage.getItem('token')
+      if (!token) {
+        toast.error('Authorization required')
+        return
+      }
+
+      console.log(`Updating event ${eventId} to ${status}`)
+
+      const response = await fetch('/api/admin/approve-event', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token.trim()}`
+        },
+        body: JSON.stringify({ eventId, status })
+      })
+
+      if (response.status === 403) {
+        toast.error('You do not have permission to update events')
+        return
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('Error response:', errorText)
+        throw new Error(errorText || 'Failed to update event status')
+      }
+
+      await fetchEvents() // Refresh the list
+      toast.success(`Event ${status} successfully`)
     } catch (error) {
-      setMessage({ type: "error", text: "Failed to reject event" })
+      console.error('Status update error:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to update event status')
     }
+  }
+
+  const getStatusBadge = (status: string) => {
+    const styles = {
+      pending: "bg-yellow-100 text-yellow-800",
+      rejected: "bg-red-100 text-red-800",
+      approved: "bg-green-100 text-green-800",
+    }
+    return styles[status as keyof typeof styles] || "bg-gray-100 text-gray-800"
+  }
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="container mx-auto py-10">
+        <div className="text-red-600 text-center">
+          <p>{error}</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -89,85 +152,61 @@ export default function ApproveEventsPage() {
           ← Back to main page
         </Link>
       </div>
-      {message && (
-        <Alert variant={message.type === "success" ? "default" : "destructive"} className="mb-5">
-          <AlertTitle>{message.type === "success" ? "Success" : "Error"}</AlertTitle>
-          <AlertDescription>{message.text}</AlertDescription>
-        </Alert>
-      )}
-      {events.map((event) => (
-        <Card key={event.id} className="mb-6">
-          <CardHeader>
-            <CardTitle>{event.title}</CardTitle>
-            <CardDescription>Created on: {event.createdAt}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Accordion type="single" collapsible className="w-full">
-              <AccordionItem value="event-details">
-                <AccordionTrigger>View Event Details</AccordionTrigger>
-                <AccordionContent>
-                  <div className="space-y-4">
-                    <div>
-                      <h4 className="font-semibold">Description</h4>
-                      <p>{event.description}</p>
+      {events.length === 0 ? (
+        <Card>
+          <CardContent className="p-6">
+            <p className="text-center text-muted-foreground">No events to manage</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-4">
+          {events.map((event) => (
+            <Card key={event.id} className="shadow-sm">
+              <CardContent className="p-6">
+                <div className="flex justify-between items-start">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-2">
+                      <h3 className="font-semibold">{event.title}</h3>
+                      <Badge className={getStatusBadge(event.status)}>
+                        {event.status.charAt(0).toUpperCase() + event.status.slice(1)}
+                      </Badge>
                     </div>
-                    <div>
-                      <h4 className="font-semibold">Category</h4>
-                      <p>{event.category}</p>
-                    </div>
-                    <div>
-                      <h4 className="font-semibold">Outcomes</h4>
-                      <ul className="list-disc pl-5">
-                        {event.outcomes.map((outcome, index) => (
-                          <li key={index}>
-                            {outcome.label}: {outcome.probability}%
-                          </li>
-                        ))}
+                    <p className="text-sm text-muted-foreground mb-2">
+                      {event.description}
+                    </p>
+                    <p className="text-sm">Category: {event.category}</p>
+                    <div className="mt-2">
+                      <p className="text-sm">Outcomes:</p>
+                      <ul className="list-disc list-inside text-sm">
+                        <li>{event.outcome1}</li>
+                        <li>{event.outcome2}</li>
                       </ul>
                     </div>
-                    <div>
-                      <h4 className="font-semibold">Resolution Source</h4>
-                      <a
-                        href={event.resolutionSource}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-500 hover:underline"
-                      >
-                        {event.resolutionSource}
-                      </a>
-                    </div>
-                    <div>
-                      <h4 className="font-semibold">Resolution Date and Time</h4>
-                      <p>{new Date(event.resolutionDateTime).toLocaleString()}</p>
-                    </div>
                   </div>
-                </AccordionContent>
-              </AccordionItem>
-            </Accordion>
-            <div className="mt-4">
-              <label htmlFor={`comment-${event.id}`} className="block text-sm font-medium text-gray-700 mb-2">
-                Approval Comments
-              </label>
-              <Textarea
-                id={`comment-${event.id}`}
-                value={comments[event.id] || ""}
-                onChange={(e) => setComments({ ...comments, [event.id]: e.target.value })}
-                placeholder="Add comments..."
-                rows={4}
-              />
-            </div>
-          </CardContent>
-          <CardFooter className="flex justify-end space-x-2">
-            <Button onClick={() => handleReject(event.id)} variant="destructive">
-              Reject
-            </Button>
-            <Button onClick={() => handleApprove(event.id)} variant="default">
-              Approve
-            </Button>
-          </CardFooter>
-        </Card>
-      ))}
+                  <div className="flex gap-2 ml-4">
+                    {event.status !== 'approved' && (
+                      <Button
+                        onClick={() => handleStatusUpdate(event.id, 'approved')}
+                        variant="default"
+                      >
+                        Approve
+                      </Button>
+                    )}
+                    {event.status !== 'rejected' && (
+                      <Button
+                        onClick={() => handleStatusUpdate(event.id, 'rejected')}
+                        variant="destructive"
+                      >
+                        Reject
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
-

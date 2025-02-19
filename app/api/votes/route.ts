@@ -1,22 +1,107 @@
 import { prisma } from "@/lib/prisma"
 import { NextResponse } from "next/server"
-// import { getServerSession } from "next-auth"
-// import { authOptions } from "@/lib/auth"
+import * as jose from 'jose'
 
-export async function POST(request: Request) {
+const JWT_SECRET = process.env.JWT_SECRET || 'karansingh'
+
+async function getUserFromToken(request: Request) {
   try {
-    // Comment out authorization checks for now
-    /*
-    const session = await getServerSession(authOptions)
-    if (!session) {
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return null
+    }
+
+    const token = authHeader.replace('Bearer ', '')
+    const secret = new TextEncoder().encode(JWT_SECRET)
+
+    let payload;
+    try {
+      const verified = await jose.jwtVerify(token, secret)
+      payload = verified.payload
+    } catch (error) {
+      return null
+    }
+
+    return payload
+  } catch (error) {
+    console.error('Token verification error:', error)
+    return null
+  }
+}
+
+export async function GET(request: Request) {
+  try {
+    const user = await getUserFromToken(request)
+    if (!user) {
       return NextResponse.json(
-        { error: "Unauthorized" },
+        { error: "Authentication required" },
         { status: 401 }
       )
     }
-    */
 
-    const { eventId, outcome, userId = 'anonymous' } = await request.json()
+    // Check if we're fetching all user votes
+    const { searchParams } = new URL(request.url)
+    if (searchParams.has('all')) {
+      // Get all votes for this user
+      const votes = await prisma.vote.findMany({
+        where: {
+          userId: user.userId as string
+        },
+        include: {
+          event: true
+        }
+      })
+
+      return NextResponse.json({
+        success: true,
+        votes
+      })
+    }
+
+    // Otherwise, check vote status for a specific event
+    const eventId = searchParams.get('eventId')
+    if (!eventId) {
+      return NextResponse.json(
+        { error: "Missing eventId" },
+        { status: 400 }
+      )
+    }
+
+    const vote = await prisma.vote.findFirst({
+      where: {
+        eventId,
+        userId: user.userId as string
+      }
+    })
+
+    return NextResponse.json({
+      success: true,
+      hasVoted: !!vote,
+      vote
+    })
+  } catch (error) {
+    console.error('Vote status error:', error)
+    return NextResponse.json(
+      { 
+        success: false,
+        error: "Failed to check vote status"
+      },
+      { status: 500 }
+    )
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const user = await getUserFromToken(request)
+    if (!user) {
+      return NextResponse.json(
+        { error: "Authentication required" },
+        { status: 401 }
+      )
+    }
+
+    const { eventId, outcome } = await request.json()
 
     if (!eventId || !outcome) {
       return NextResponse.json(
@@ -52,7 +137,7 @@ export async function POST(request: Request) {
     const existingVote = await prisma.vote.findFirst({
       where: {
         eventId,
-        userId
+        userId: user.userId as string
       }
     })
 
@@ -90,7 +175,7 @@ export async function POST(request: Request) {
           data: {
             eventId,
             outcome,
-            userId
+            userId: user.userId as string
           }
         }),
         prisma.event.update({
@@ -124,4 +209,4 @@ export async function POST(request: Request) {
 }
 
 export const dynamic = 'force-dynamic'
-export const revalidate = 0 
+export const revalidate = 0

@@ -19,6 +19,20 @@ import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { Snackbar } from "@mui/material"
 
+interface Event {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  outcome1: string;
+  outcome2: string;
+  status: string;
+  resolutionDateTime: string;
+  outcome1Votes: number;
+  outcome2Votes: number;
+  createdAt: string;
+}
+
 interface UserData {
   id: string;
   email: string;
@@ -33,7 +47,35 @@ export default function Page() {
   const [userData, setUserData] = useState<UserData | null>(null);
   const [openSnackbar, setOpenSnackbar] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [events, setEvents] = useState<Event[]>([]);
+  const [loading, setLoading] = useState(true);
   const router = useRouter();
+
+  const updateEventVotes = (eventId: string, oldOutcome: string | null, newOutcome: string) => {
+    setEvents(currentEvents => 
+      currentEvents.map(event => {
+        if (event.id === eventId) {
+          const updatedEvent = { ...event };
+          // If there was a previous vote, decrement it
+          if (oldOutcome) {
+            if (oldOutcome === 'outcome1') {
+              updatedEvent.outcome1Votes--;
+            } else {
+              updatedEvent.outcome2Votes--;
+            }
+          }
+          // Increment the new vote
+          if (newOutcome === 'outcome1') {
+            updatedEvent.outcome1Votes++;
+          } else {
+            updatedEvent.outcome2Votes++;
+          }
+          return updatedEvent;
+        }
+        return event;
+      })
+    );
+  };
 
   useEffect(() => {
     const checkAuth = () => {
@@ -47,45 +89,10 @@ export default function Page() {
 
       try {
         const parsedUserData = JSON.parse(storedUserData);
-        
         if (!parsedUserData || !parsedUserData.id || !parsedUserData.email) {
           throw new Error('Invalid user data structure');
         }
-
         setUserData(parsedUserData);
-        
-        fetch(`/api/user/profile?userId=${parsedUserData.id}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        })
-        .then((response) => {
-          if (!response.ok) {
-            throw new Error('Failed to fetch user data');
-          }
-          return response.json();
-        })
-        .then((data) => {
-          if (data && data.user) {
-            const validUserData = {
-              id: data.user.id,
-              email: data.user.email,
-              firstName: data.user.firstName || null,
-              lastName: data.user.lastName || null,
-              displayName: data.user.displayName || null,
-              role: data.user.role,
-              isSuperUser: Boolean(data.user.isSuperUser)
-            };
-            setUserData(validUserData);
-            localStorage.setItem('userData', JSON.stringify(validUserData));
-          }
-        })
-        .catch((error) => {
-          console.error('Error fetching user data:', error);
-          // Keep existing user data on fetch error
-          toast.error('Failed to update profile data');
-        });
       } catch (error) {
         console.error('Error in auth check:', error);
         localStorage.removeItem('userData');
@@ -94,13 +101,72 @@ export default function Page() {
       }
     };
 
+    const fetchEvents = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+          setLoading(false);
+          return;
+        }
+
+        const response = await fetch('/api/events?status=approved', {
+          headers: {
+            'Authorization': `Bearer ${token.trim()}`
+          }
+        });
+
+        if (!response.ok) {
+          if (response.status === 401) {
+            toast.error('Please login to view events');
+          } else {
+            toast.error('Failed to fetch events');
+          }
+          setLoading(false);
+          return;
+        }
+
+        const data = await response.json();
+        if (data.success) {
+          // Filter for active events (where resolution date hasn't passed)
+          const now = new Date();
+          const activeEvents = data.events.filter((event: Event) => {
+            const resolutionDate = new Date(event.resolutionDateTime);
+            return resolutionDate > now;
+          });
+
+          // Sort by creation date (newest first)
+          activeEvents.sort((a: Event, b: Event) => 
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          );
+
+          setEvents(activeEvents);
+        }
+      } catch (error) {
+        console.error('Error:', error);
+        toast.error('Failed to fetch events');
+      } finally {
+        setLoading(false);
+      }
+    };
+
     checkAuth();
+    fetchEvents();
     const interval = setInterval(checkAuth, 10000);
     
     return () => {
       clearInterval(interval);
     };
-  }, []); // Empty dependency array since we don't need to re-run on router changes
+  }, []);
+
+  useEffect(() => {
+    const handleUpdateVotes = (event: CustomEvent) => {
+      updateEventVotes(event.detail.eventId, event.detail.oldOutcome, event.detail.newOutcome);
+    };
+    window.addEventListener('updateVotes', handleUpdateVotes);
+    return () => {
+      window.removeEventListener('updateVotes', handleUpdateVotes);
+    };
+  }, []);
 
   const handleLogout = () => {
     try {
@@ -399,38 +465,26 @@ export default function Page() {
 
           {/* Prediction Markets */}
           <div className="grid gap-4">
-            <PredictionMarket
-              title="Who will be Trump's Secretary of Agriculture?"
-              options={[
-                { name: "Brooke Rollins", percentage: "94%" },
-                { name: "Kelly Loeffler", percentage: "2%" },
-              ]}
-              value="$714,908"
-            />
-            <PredictionMarket
-              title="Who will be Trump's Secretary of Labor?"
-              options={[
-                { name: "Lori Chavez-DeRemer", percentage: "92%" },
-                { name: "Brandon Williams", percentage: "2%" },
-              ]}
-              value="$207,324"
-            />
-            <PredictionMarket
-              title="Who will be Trump's Secretary of Defense?"
-              options={[
-                { name: "Pete Hegseth", percentage: "59%" },
-                { name: "Mike Rogers", percentage: "9%" },
-              ]}
-              value="$2,905,143"
-            />
-            <PredictionMarket
-              title="When will Bitcoin hit $100k?"
-              options={[
-                { name: "Before December", percentage: "44%" },
-                { name: "Before January", percentage: "77%" },
-              ]}
-              value="$954,406"
-            />
+            {loading ? (
+              <div className="text-center p-4">Loading events...</div>
+            ) : events.length === 0 ? (
+              <div className="text-center text-muted-foreground p-4">
+                No active predictions found
+              </div>
+            ) : (
+              events.map((event) => (
+                <PredictionMarket
+                  key={event.id}
+                  eventId={event.id}
+                  title={event.title}
+                  options={[
+                    { id: 'outcome1', name: event.outcome1, percentage: `${Math.round((event.outcome1Votes / (event.outcome1Votes + event.outcome2Votes || 1)) * 100)}%` },
+                    { id: 'outcome2', name: event.outcome2, percentage: `${Math.round((event.outcome2Votes / (event.outcome1Votes + event.outcome2Votes || 1)) * 100)}%` },
+                  ]}
+                  value={`${event.outcome1Votes + event.outcome2Votes} votes`}
+                />
+              ))
+            )}
           </div>
         </main>
       </div>
@@ -450,43 +504,123 @@ function PredictionMarket({
   title,
   options,
   value,
+  eventId,
 }: {
   title: string
-  options: { name: string; percentage: string }[]
+  options: { id: string; name: string; percentage: string }[]
   value: string
+  eventId: string
 }) {
+  const [userVote, setUserVote] = useState<string | null>(null);
+  const [isVoting, setIsVoting] = useState(false);
+
+  useEffect(() => {
+    const fetchUserVote = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+
+        const response = await fetch(`/api/votes?eventId=${eventId}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+
+        if (!response.ok) return;
+
+        const data = await response.json();
+        if (data.success && data.vote) {
+          setUserVote(data.vote.outcome);
+        }
+      } catch (error) {
+        console.error('Error fetching user vote:', error);
+      }
+    };
+
+    fetchUserVote();
+  }, [eventId]);
+
+  const handleVote = async (outcomeId: string) => {
+    try {
+      setIsVoting(true);
+      const token = localStorage.getItem('token');
+      if (!token) {
+        toast.error('Please login to vote');
+        return;
+      }
+
+      const response = await fetch('/api/votes', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          eventId: eventId,
+          outcome: outcomeId
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to submit vote');
+      }
+
+      const data = await response.json();
+      if (data.success) {
+        // Update vote counts locally
+        window.dispatchEvent(new CustomEvent('updateVotes', { 
+          detail: { 
+            eventId, 
+            oldOutcome: userVote, 
+            newOutcome: outcomeId 
+          }
+        }));
+        setUserVote(outcomeId);
+        toast.success('Vote submitted successfully!');
+      } else {
+        toast.error(data.message || 'Failed to submit vote');
+      }
+    } catch (error) {
+      console.error('Error voting:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to submit vote');
+    } finally {
+      setIsVoting(false);
+    }
+  };
+
   return (
     <Card>
-      <CardHeader className="pb-0">
-        <h3 className="text-lg font-medium">{title}</h3>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <div className="space-y-1">
+          <div className="text-sm font-medium leading-none">{title}</div>
+          <div className="text-sm text-muted-foreground">{value}</div>
+        </div>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {options.map((option) => (
-          <div key={option.name} className="flex items-center gap-4">
-            <div className="flex-1">
-              <div className="flex items-center justify-between">
+      <CardContent>
+        <div className="space-y-2">
+          {options.map((option) => (
+            <div key={option.id} className="flex items-center justify-between text-sm">
+              <Button 
+                variant={userVote === option.id ? "default" : "ghost"}
+                className={`text-left w-full flex justify-between items-center px-2 py-1 ${
+                  userVote === option.id ? "bg-primary text-primary-foreground hover:bg-primary/90" : "hover:bg-gray-100"
+                }`}
+                onClick={() => handleVote(option.id)}
+                disabled={isVoting}
+              >
                 <span>{option.name}</span>
-                <span className="font-medium">{option.percentage}</span>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm">
-                Yes
-              </Button>
-              <Button variant="outline" size="sm">
-                No
+                <span className={userVote === option.id ? "text-primary-foreground" : "text-muted-foreground"}>
+                  {option.percentage}
+                  {isVoting && userVote !== option.id && 
+                    <span className="ml-2 inline-block animate-spin">⌛</span>
+                  }
+                </span>
               </Button>
             </div>
-          </div>
-        ))}
-        <div className="flex items-center justify-between text-sm text-muted-foreground pt-2">
-          <span>{value}</span>
-          <Button variant="ghost" size="icon">
-            <MoreHorizontal className="w-4 h-4" />
-          </Button>
+          ))}
         </div>
       </CardContent>
     </Card>
   )
 }
-
