@@ -21,11 +21,13 @@ NEXTAUTH_URL="http://localhost:3000"
 NEXTAUTH_SECRET="your secretkey"
 ```
 
-Git clone the  repository 
+Git clone the repository 
 
-'''ini
+```bash
 git clone -b merged https://github.com/karankk496/predixarenaProject.git
-'''
-'''ini
+```
+```bash
 cd predixarenaProject
-'''
+```
+
+
