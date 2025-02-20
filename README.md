@@ -50,7 +50,7 @@ npx prisma studio
 ```
 The UI will be running at http://localhost:5555.
 
-
+## Functionlity
 
 **For Admin:**  
 - Can create new events.  
