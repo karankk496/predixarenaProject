@@ -369,8 +369,7 @@ export default function CreateEventPage() {
             className="text-sm text-primary hover:text-primary/90"
             onClick={(e) => {
               e.preventDefault();
-              reset();
-              setSelectedCategory("");
+              router.push('/events');
             }}
           >
             ← Back to events list
@@ -380,8 +379,7 @@ export default function CreateEventPage() {
             className="text-sm text-primary hover:text-primary/90"
             onClick={(e) => {
               e.preventDefault();
-              reset();
-              setSelectedCategory("");
+              router.push('/');
             }}
           >
             Back to main page

@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Filter } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { toast } from "@/components/ui/use-toast";
+import toast from 'react-hot-toast';
 import {
   Select,
   SelectContent,
@@ -14,7 +14,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import jwt from 'jsonwebtoken';
+import { Toaster } from 'react-hot-toast';
+import { formatDistanceToNow } from 'date-fns';
 
 interface Event {
   id: string;
@@ -27,6 +28,16 @@ interface Event {
   resolutionSource: string;
   resolutionDateTime: string;
   createdAt: string;
+  user: {
+    image?: string;
+    displayName?: string;
+  };
+  outcome1Votes: number;
+  outcome2Votes: number;
+  votes: {
+    userId: string;
+    outcome: string;
+  }[];
 }
 
 const STATUS_FILTERS = [
@@ -51,6 +62,8 @@ const categories = [
 
 const statuses = ["All", "approved", "rejected", "pending"] as const;
 
+const JWT_SECRET = process.env.NEXT_PUBLIC_JWT_SECRET || 'your-secret-key';
+
 export default function EventsPage() {
   const [events, setEvents] = useState<Event[]>([]);
   const [filteredEvents, setFilteredEvents] = useState<Event[]>([]);
@@ -60,6 +73,7 @@ export default function EventsPage() {
   const [selectedStatus, setSelectedStatus] = useState<string>("All");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [user, setUser] = useState<any | null>(null);
 
   const fetchAllEvents = async () => {
     try {
@@ -191,13 +205,32 @@ export default function EventsPage() {
     }
   };
 
+  const getUserVote = (event: Event) => {
+    const token = localStorage.getItem('token');
+    if (!token) return null;
+    
+    try {
+      const decoded = JSON.parse(atob(token.split('.')[1])) as {
+        role: string;
+        userId: string;
+      };
+      const userVote = event.votes.find(vote => vote.userId === decoded.userId);
+      return userVote?.outcome || null;
+    } catch {
+      return null;
+    }
+  };
+
   const renderEventActions = (event: Event) => {
     const token = localStorage.getItem('token');
     if (!token) return null;
     
     try {
-      const decoded = jwt.verify(token, process.env.NEXT_PUBLIC_JWT_SECRET as string) as any;
-      const isAdmin = decoded.role === 'ADMIN' || decoded.isSuperUser === true;
+      const decoded = JSON.parse(atob(token.split('.')[1])) as {
+        role: string;
+        userId: string;
+      };
+      const isAdmin = decoded.role === 'ADMIN';
       
       if (isAdmin && event.status === 'pending') {
         return (
@@ -233,22 +266,63 @@ export default function EventsPage() {
     filterEvents();
   }, [events, statusFilter]);
 
+  useEffect(() => {
+    const userData = localStorage.getItem('user');
+    if (userData) {
+      setUser(JSON.parse(userData));
+    }
+  }, []);
+
   const filterEvents = () => {
     let filtered = [...events];
 
-    // Apply status filter
-    if (statusFilter !== "all") {
-      filtered = filtered.filter(event => 
-        event.status.toLowerCase() === statusFilter.toLowerCase()
+    try {
+      const token = localStorage.getItem('token');
+      
+      // If no token, only show approved events
+      if (!token) {
+        filtered = filtered.filter(event => event.status === 'approved');
+        setFilteredEvents(filtered);
+        return;
+      }
+
+      // Decode token without verification for client-side
+      const decoded = JSON.parse(atob(token.split('.')[1])) as {
+        role: string;
+        userId: string;
+      };
+      
+      const isAdmin = decoded.role === 'ADMIN';
+      const userId = decoded.userId;
+
+      // Apply status filter
+      if (statusFilter !== "all") {
+        filtered = filtered.filter(event => 
+          event.status.toLowerCase() === statusFilter.toLowerCase()
+        );
+      } else {
+        // For non-admin users, show:
+        // 1. All approved events
+        // 2. Their own events (any status)
+        if (!isAdmin) {
+          filtered = filtered.filter(event => 
+            event.status === 'approved' || event.userId === userId
+          );
+        }
+      }
+
+      // Sort by creation date (newest first)
+      filtered.sort((a, b) => 
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       );
+
+      setFilteredEvents(filtered);
+    } catch (error) {
+      // If any error occurs, at least show approved events
+      filtered = filtered.filter(event => event.status === 'approved');
+      setFilteredEvents(filtered);
+      console.error('Error filtering events:', error);
     }
-
-    // Sort by creation date (newest first)
-    filtered.sort((a, b) => 
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
-
-    setFilteredEvents(filtered);
   };
 
   const getStatusBadgeColor = (status: string) => {
@@ -260,6 +334,10 @@ export default function EventsPage() {
       default:
         return 'bg-yellow-100 text-yellow-800';
     }
+  };
+
+  const getTimeRemaining = (resolutionDateTime: string) => {
+    return formatDistanceToNow(new Date(resolutionDateTime), { addSuffix: true });
   };
 
   if (loading) {
@@ -304,9 +382,16 @@ export default function EventsPage() {
             </Select>
           </div>
         </div>
-        <Link href="/events/create">
-          <Button>Create New Event</Button>
-        </Link>
+        <div className="flex gap-4">
+          <Link href="/events/create">
+            <Button>Create New Event</Button>
+          </Link>
+          {user?.role === 'ADMIN' && (
+            <Link href="/events/approve">
+              <Button variant="outline">Approve Events</Button>
+            </Link>
+          )}
+        </div>
       </div>
 
       <div className="mb-4">
@@ -327,38 +412,104 @@ export default function EventsPage() {
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {filteredEvents.map((event) => (
             <Card key={event.id} className="shadow-sm">
-              <CardHeader>
-                <CardTitle>{event.title}</CardTitle>
-                <CardDescription>
-                  <div className="flex items-center justify-between">
-                    <Badge variant="outline">{event.category}</Badge>
-                    <Badge className={getStatusBadgeColor(event.status)}>
-                      {event.status.charAt(0).toUpperCase() + event.status.slice(1)}
-                    </Badge>
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    {event.user.image ? (
+                      <img 
+                        src={event.user.image} 
+                        alt={event.user.displayName || 'User'} 
+                        className="w-8 h-8 rounded-full"
+                      />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center">
+                        {(event.user.displayName || 'U')[0].toUpperCase()}
+                      </div>
+                    )}
+                    <span className="text-sm font-medium">{event.user.displayName}</span>
                   </div>
-                </CardDescription>
+                  <Badge 
+                    className={
+                      event.status === 'approved' 
+                        ? 'bg-green-100 text-green-800' 
+                        : event.status === 'rejected'
+                        ? 'bg-red-100 text-red-800'
+                        : 'bg-yellow-100 text-yellow-800'
+                    }
+                  >
+                    {event.status.charAt(0).toUpperCase() + event.status.slice(1)}
+                  </Badge>
+                </div>
+                <CardTitle className="text-lg">{event.title}</CardTitle>
+                <div className="flex items-center justify-between mt-1">
+                  <Badge variant="outline" className="text-xs">
+                    {event.category}
+                  </Badge>
+                  <span className="text-sm text-muted-foreground">
+                    Ends {getTimeRemaining(event.resolutionDateTime)}
+                  </span>
+                </div>
               </CardHeader>
               <CardContent>
-                <p className="text-sm text-muted-foreground mb-4">{event.description}</p>
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="font-medium">Outcome 1:</span>
-                    <span>{event.outcome1}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="font-medium">Outcome 2:</span>
-                    <span>{event.outcome2}</span>
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    Created: {new Date(event.createdAt).toLocaleDateString()}
-                  </div>
+                <div className="mt-4 space-y-4">
+                  {event.status === 'approved' && (
+                    <>
+                      <div className="flex flex-col gap-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium">{event.outcome1}</span>
+                          <span className="text-sm text-gray-500">
+                            {Math.round((event.outcome1Votes / (event.outcome1Votes + event.outcome2Votes || 1)) * 100)}%
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium">{event.outcome2}</span>
+                          <span className="text-sm text-gray-500">
+                            {Math.round((event.outcome2Votes / (event.outcome1Votes + event.outcome2Votes || 1)) * 100)}%
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <Button 
+                          onClick={() => handleVote(event.id, 'outcome1')}
+                          className={`w-full h-12 ${
+                            getUserVote(event) === 'outcome1'
+                              ? 'bg-green-600 text-white hover:bg-green-700'
+                              : 'bg-green-50 hover:bg-green-100 text-green-800'
+                          }`}
+                          disabled={false}
+                        >
+                          {event.outcome1} ↑ {getUserVote(event) === 'outcome1' && '✓'}
+                        </Button>
+                        <Button 
+                          onClick={() => handleVote(event.id, 'outcome2')}
+                          className={`w-full h-12 ${
+                            getUserVote(event) === 'outcome2'
+                              ? 'bg-red-600 text-white hover:bg-red-700'
+                              : 'bg-red-50 hover:bg-red-100 text-red-800'
+                          }`}
+                          disabled={false}
+                        >
+                          {event.outcome2} ↓ {getUserVote(event) === 'outcome2' && '✓'}
+                        </Button>
+                      </div>
+
+                      <div className="flex items-center justify-between text-sm text-gray-500">
+                        <span>{event.outcome1Votes + event.outcome2Votes} votes</span>
+                        <span className="bg-orange-100 rounded-full px-3 py-1 text-orange-700">
+                          {Math.round((event.outcome1Votes / (event.outcome1Votes + event.outcome2Votes || 1)) * 100)}% chance
+                        </span>
+                      </div>
+                    </>
+                  )}
+                  {renderEventActions(event)}
                 </div>
-                {renderEventActions(event)}
               </CardContent>
             </Card>
           ))}
         </div>
       )}
+      <Toaster />
     </div>
   );
 }

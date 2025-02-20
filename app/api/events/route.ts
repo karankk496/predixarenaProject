@@ -49,12 +49,44 @@ export async function GET(request: Request) {
       )
     }
 
+    // Get user and check role
+    const user = await prisma.user.findUnique({
+      where: { id: payload.userId as string }
+    });
+
+    if (!user) {
+      return NextResponse.json(
+        { error: 'User not found' },
+        { status: 404 }
+      );
+    }
+
     // Get the status from URL query parameters
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
 
-    // Build the where clause based on status
-    const where = status ? { status: status.toLowerCase() } : {};
+    // Build where clause based on user role
+    let where: any = {};
+
+    // Different filtering logic for admin vs other users
+    if (user.role === 'ADMIN') {
+      // Admin can see all events with optional status filter
+      if (status) {
+        where.status = status.toLowerCase();
+      }
+    } else {
+      // Non-admin users: show only their events except for approved events
+      if (status === 'approved') {
+        // For approved events, show all
+        where.status = 'approved';
+      } else {
+        // For other statuses, show only their own events
+        where = {
+          userId: user.id,
+          ...(status ? { status: status.toLowerCase() } : {})
+        };
+      }
+    }
 
     const events = await prisma.event.findMany({
       where,
@@ -62,14 +94,23 @@ export async function GET(request: Request) {
         createdAt: 'desc'
       },
       include: {
-        votes: true
+        votes: true,
+        user: {
+          select: {
+            displayName: true,
+            email: true,
+            role: true,
+            image: true
+          }
+        }
       }
     });
 
     return NextResponse.json({
       success: true,
       events,
-      total: events.length
+      total: events.length,
+      isAdmin: user.role === 'ADMIN'
     });
 
   } catch (error) {
@@ -110,15 +151,15 @@ export async function POST(req: Request) {
       )
     }
 
-    // Verify user is admin
+    // Verify user exists (removed admin check)
     const user = await prisma.user.findUnique({
       where: { id: payload.userId as string }
     })
 
-    if (!user || user.role !== 'ADMIN') {
+    if (!user) {
       return NextResponse.json(
-        { error: 'Only admin users can create events' },
-        { status: 403 }
+        { error: 'User not found' },
+        { status: 404 }
       )
     }
 
@@ -137,24 +178,6 @@ export async function POST(req: Request) {
       }, { status: 400 });
     }
 
-    // Check for duplicate event
-    const existingEvent = await prisma.event.findFirst({
-      where: {
-        title: body.title,
-        category: formattedCategory
-      }
-    });
-
-    if (existingEvent) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: `An event titled "${body.title}" already exists in the "${formattedCategory}" category.`
-        },
-        { status: 409 }
-      );
-    }
-
     // Create event with validated data
     const event = await prisma.event.create({
       data: {
@@ -165,7 +188,7 @@ export async function POST(req: Request) {
         outcome2: body.outcome2,
         resolutionSource: body.resolutionSource,
         resolutionDateTime: new Date(body.resolutionDateTime),
-        status: "pending",
+        status: "pending", // All events start as pending
         outcome1Votes: 0,
         outcome2Votes: 0,
         userId: user.id

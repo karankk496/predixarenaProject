@@ -18,6 +18,7 @@ import {
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { Snackbar } from "@mui/material"
+import { formatDistanceToNow } from "date-fns"
 
 interface Event {
   id: string;
@@ -31,6 +32,10 @@ interface Event {
   outcome1Votes: number;
   outcome2Votes: number;
   createdAt: string;
+  user: {
+    image?: string;
+    displayName: string;
+  };
 }
 
 interface UserData {
@@ -109,6 +114,7 @@ export default function Page() {
           return;
         }
 
+        // Fetch all approved events
         const response = await fetch('/api/events?status=approved', {
           headers: {
             'Authorization': `Bearer ${token.trim()}`
@@ -127,17 +133,18 @@ export default function Page() {
 
         const data = await response.json();
         if (data.success) {
-          // Filter for active events (where resolution date hasn't passed)
           const now = new Date();
-          const activeEvents = data.events.filter((event: Event) => {
-            const resolutionDate = new Date(event.resolutionDateTime);
-            return resolutionDate > now;
-          });
-
-          // Sort by creation date (newest first)
-          activeEvents.sort((a: Event, b: Event) => 
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-          );
+          
+          // Filter for active events (where resolution date hasn't passed)
+          // and sort by most recent first
+          const activeEvents = data.events
+            .filter((event: Event) => {
+              const resolutionDate = new Date(event.resolutionDateTime);
+              return resolutionDate > now;
+            })
+            .sort((a: Event, b: Event) => 
+              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            );
 
           setEvents(activeEvents);
         }
@@ -243,12 +250,21 @@ export default function Page() {
                   </DropdownMenuItem>
                   
                   {userData?.isSuperUser && (
-                    <DropdownMenuItem>
-                      <Link href="/manageusers" className="flex items-center gap-2">
-                        <Settings className="w-4 h-4" />
-                        <span>Manage Users</span>
-                      </Link>
-                    </DropdownMenuItem>
+                    <>
+                      <DropdownMenuItem>
+                        <Link href="/manageusers" className="flex items-center gap-2">
+                          <Settings className="w-4 h-4" />
+                          <span>Manage Users</span>
+                        </Link>
+                      </DropdownMenuItem>
+
+                      <DropdownMenuItem>
+                        <Link href="/admin/approve-events" className="flex items-center gap-2">
+                          <Settings className="w-4 h-4" />
+                          <span>Manage Events</span>
+                        </Link>
+                      </DropdownMenuItem>
+                    </>
                   )}
                   
                   <DropdownMenuItem asChild className="flex items-center gap-2">
@@ -450,17 +466,17 @@ export default function Page() {
               <Link href="/events/create">Create New Event</Link>
             </Button>
             <Button asChild variant="outline">
-              <Link href="/events/new-event">New Event (Alternative)</Link>
-            </Button>
-            <Button asChild variant="outline">
               <Link href="/events">View All Events</Link>
             </Button>
             <Button asChild variant="outline">
               <Link href="/vote">Vote on Predictions</Link>
             </Button>
-            <Button asChild variant="outline">
-              <Link href="/admin/approve-events">Approve Events</Link>
-            </Button>
+            {/* Only show Approve Events button for Admin and Ops users */}
+            {userData?.role && ['ADMIN'].includes(userData.role) && (
+              <Button asChild variant="outline">
+                <Link href="/admin/approve-events">Approve Events</Link>
+              </Button>
+            )}
           </div>
 
           {/* Prediction Markets */}
@@ -482,6 +498,8 @@ export default function Page() {
                     { id: 'outcome2', name: event.outcome2, percentage: `${Math.round((event.outcome2Votes / (event.outcome1Votes + event.outcome2Votes || 1)) * 100)}%` },
                   ]}
                   value={`${event.outcome1Votes + event.outcome2Votes} votes`}
+                  user={event.user}
+                  resolutionDateTime={event.resolutionDateTime}
                 />
               ))
             )}
@@ -505,11 +523,18 @@ function PredictionMarket({
   options,
   value,
   eventId,
+  user,
+  resolutionDateTime,
 }: {
   title: string
   options: { id: string; name: string; percentage: string }[]
   value: string
   eventId: string
+  user: {
+    image?: string;
+    displayName: string;
+  }
+  resolutionDateTime: string
 }) {
   const [userVote, setUserVote] = useState<string | null>(null);
   const [isVoting, setIsVoting] = useState(false);
@@ -589,36 +614,78 @@ function PredictionMarket({
     }
   };
 
+  const getTimeRemaining = (resolutionDateTime: string) => {
+    return formatDistanceToNow(new Date(resolutionDateTime), { addSuffix: true });
+  };
+
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <div className="space-y-1">
-          <div className="text-sm font-medium leading-none">{title}</div>
-          <div className="text-sm text-muted-foreground">{value}</div>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-2">
-          {options.map((option) => (
-            <div key={option.id} className="flex items-center justify-between text-sm">
-              <Button 
-                variant={userVote === option.id ? "default" : "ghost"}
-                className={`text-left w-full flex justify-between items-center px-2 py-1 ${
-                  userVote === option.id ? "bg-primary text-primary-foreground hover:bg-primary/90" : "hover:bg-gray-100"
-                }`}
-                onClick={() => handleVote(option.id)}
-                disabled={isVoting}
-              >
-                <span>{option.name}</span>
-                <span className={userVote === option.id ? "text-primary-foreground" : "text-muted-foreground"}>
-                  {option.percentage}
-                  {isVoting && userVote !== option.id && 
-                    <span className="ml-2 inline-block animate-spin">⌛</span>
-                  }
-                </span>
-              </Button>
+      <CardContent className="pt-6">
+        <div className="flex flex-col gap-4">
+          {/* User Info */}
+          <div className="flex items-center gap-2">
+            {user?.image ? (
+              <img 
+                src={user.image} 
+                alt={user.displayName || ''} 
+                className="w-8 h-8 rounded-full"
+              />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center">
+                {user?.displayName ? user.displayName[0].toUpperCase() : 'U'}
+              </div>
+            )}
+            <span className="text-sm font-medium">{user?.displayName || 'Anonymous'}</span>
+          </div>
+
+          {/* Title, Chance and End Time */}
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-medium">{title}</h3>
+              <div className="text-gray-500">
+                {options[0].percentage} chance
+              </div>
             </div>
-          ))}
+            <span className="text-sm text-muted-foreground">
+              Ends {getTimeRemaining(resolutionDateTime)}
+            </span>
+          </div>
+
+          {/* Options with Percentages */}
+          <div className="flex flex-col gap-2">
+            {options.map((option) => (
+              <div key={option.id} className="flex items-center justify-between">
+                <span className="text-sm font-medium">{option.name}</span>
+                <span className="text-sm text-gray-500">{option.percentage}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Voting Buttons */}
+          <div className="flex gap-2">
+            <Button 
+              onClick={() => handleVote('outcome1')}
+              className={`flex-1 h-12 ${
+                userVote === 'outcome1'
+                  ? 'bg-green-600 text-white hover:bg-green-700'
+                  : 'bg-green-50 hover:bg-green-100 text-green-800'
+              }`}
+              disabled={isVoting}
+            >
+              {options[0].name} ↑ {userVote === 'outcome1' && '✓'}
+            </Button>
+            <Button 
+              onClick={() => handleVote('outcome2')}
+              className={`flex-1 h-12 ${
+                userVote === 'outcome2'
+                  ? 'bg-red-600 text-white hover:bg-red-700'
+                  : 'bg-red-50 hover:bg-red-100 text-red-800'
+              }`}
+              disabled={isVoting}
+            >
+              {options[1].name} ↓ {userVote === 'outcome2' && '✓'}
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>

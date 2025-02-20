@@ -28,6 +28,10 @@ interface Event {
   outcome1Votes: number;
   outcome2Votes: number;
   createdAt: string;
+  user: {
+    image?: string;
+    displayName?: string;
+  };
 }
 
 interface Vote {
@@ -304,39 +308,88 @@ export default function VotePage() {
                   <CardTitle>{event.title}</CardTitle>
                   <CardDescription>
                     <div className="flex flex-col gap-2">
-                      <Badge variant="outline">{event.category}</Badge>
-                      <p className="text-sm">
-                        {eventEnded 
-                          ? "Event has ended"
-                          : `Ends ${getTimeRemaining(event.resolutionDateTime)}`
-                        }
-                      </p>
+                      <div className="flex items-center justify-between">
+                        <Badge variant="outline">{event.category}</Badge>
+                        <span className="text-sm">
+                          {eventEnded 
+                            ? "Event has ended"
+                            : `Ends ${getTimeRemaining(event.resolutionDateTime)}`
+                          }
+                        </span>
+                      </div>
+                      <p className="text-sm text-muted-foreground">{event.description}</p>
                     </div>
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm text-muted-foreground mb-4">{event.description}</p>
-                  <div className="space-y-2">
+                  <div className="space-y-4">
+                    {/* User Info */}
+                    <div className="flex items-center gap-2">
+                      {event.user?.image ? (
+                        <img 
+                          src={event.user.image} 
+                          alt={event.user.displayName || ''} 
+                          className="w-8 h-8 rounded-full"
+                        />
+                      ) : (
+                        <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center">
+                          {event.user?.displayName ? event.user.displayName[0].toUpperCase() : 'U'}
+                        </div>
+                      )}
+                      <span className="text-sm font-medium">{event.user?.displayName || 'Anonymous'}</span>
+                    </div>
+
+                    {/* Rest of the content */}
+                    <p className="text-sm text-muted-foreground mb-4">{event.description}</p>
                     {!eventEnded && (
-                      <div className="mt-4 space-y-2">
-                        <Button 
-                          onClick={() => handleVote(event.id, 'outcome1')} 
-                          className={`w-full mb-2`}
-                          variant={userVotes[event.id] === 'outcome1' ? "default" : "outline"}
-                          disabled={eventEnded}
-                        >
-                          {userVotes[event.id] === 'outcome1' && '✓ '}
-                          {event.outcome1} ({event.outcome1Votes || 0})
-                        </Button>
-                        <Button 
-                          onClick={() => handleVote(event.id, 'outcome2')} 
-                          className={`w-full`}
-                          variant={userVotes[event.id] === 'outcome2' ? "default" : "outline"}
-                          disabled={eventEnded}
-                        >
-                          {userVotes[event.id] === 'outcome2' && '✓ '}
-                          {event.outcome2} ({event.outcome2Votes || 0})
-                        </Button>
+                      <div className="mt-4 space-y-4">
+                        {/* Title and Chance */}
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-lg font-medium">{event.title}</h3>
+                          <div className="text-gray-500">
+                            {Math.round((event.outcome1Votes / (event.outcome1Votes + event.outcome2Votes || 1)) * 100)}% chance
+                          </div>
+                        </div>
+
+                        {/* Options with Percentages */}
+                        <div className="flex flex-col gap-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium">{event.outcome1}</span>
+                            <span className="text-sm text-gray-500">
+                              {Math.round((event.outcome1Votes / (event.outcome1Votes + event.outcome2Votes || 1)) * 100)}%
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium">{event.outcome2}</span>
+                            <span className="text-sm text-gray-500">
+                              {Math.round((event.outcome2Votes / (event.outcome1Votes + event.outcome2Votes || 1)) * 100)}%
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Voting Buttons */}
+                        <div className="flex gap-2">
+                          <Button 
+                            onClick={() => handleVote(event.id, 'outcome1')}
+                            className={`flex-1 h-12 ${
+                              userVotes[event.id] === 'outcome1'
+                                ? 'bg-green-600 text-white hover:bg-green-700'
+                                : 'bg-green-50 hover:bg-green-100 text-green-800'
+                            }`}
+                          >
+                            {event.outcome1} ↑ {userVotes[event.id] === 'outcome1' && '✓'}
+                          </Button>
+                          <Button 
+                            onClick={() => handleVote(event.id, 'outcome2')}
+                            className={`flex-1 h-12 ${
+                              userVotes[event.id] === 'outcome2'
+                                ? 'bg-red-600 text-white hover:bg-red-700'
+                                : 'bg-red-50 hover:bg-red-100 text-red-800'
+                            }`}
+                          >
+                            {event.outcome2} ↓ {userVotes[event.id] === 'outcome2' && '✓'}
+                          </Button>
+                        </div>
                       </div>
                     )}
                     {eventEnded && (
