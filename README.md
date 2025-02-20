@@ -42,3 +42,11 @@ npx prisma migrate dev
 npm run dev
 ```
 The project will be running at http://localhost:3000.
+
+To see, the database on interactive UI, run below command
+
+```bash
+npx prisma studio
+```
+The UI will be running at http://localhost:5555.
+
