@@ -88,36 +88,59 @@ export default function VotePage() {
   const fetchApprovedEvents = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('token');
+      
       if (!token) {
-        toast.error('Please login to view events')
-        return
+        toast({
+          title: "Authentication Required",
+          description: "Please login to view events",
+          variant: "destructive",
+        });
+        setError('Please login to view events');
+        return;
       }
 
       const response = await fetch('/api/events?status=approved', {
         headers: {
-          'Authorization': `Bearer ${token.trim()}`
+          'Authorization': `Bearer ${token.trim()}`,
+          'Content-Type': 'application/json'
         }
       });
       
       if (!response.ok) {
+        const errorData = await response.json();
         if (response.status === 401) {
-          toast.error('Please login to view events')
-          return
+          localStorage.removeItem('token'); // Clear invalid token
+          toast({
+            title: "Session Expired",
+            description: "Please login again",
+            variant: "destructive",
+          });
+          return;
         }
-        throw new Error('Failed to fetch approved events')
+        throw new Error(errorData.error || 'Failed to fetch approved events');
       }
       
       const data = await response.json();
       
       if (data.success) {
-        setEvents(data.events);
+        // Filter out events that have ended
+        const activeEvents = data.events.filter((event: Event) => 
+          !isPast(new Date(event.resolutionDateTime))
+        );
+        setEvents(activeEvents);
+        setFilteredEvents(activeEvents);
       } else {
         throw new Error(data.error || 'Failed to fetch events');
       }
     } catch (error) {
       console.error('Error fetching events:', error);
       setError(error instanceof Error ? error.message : 'Failed to fetch events');
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : 'Failed to fetch events',
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }

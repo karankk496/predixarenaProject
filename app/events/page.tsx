@@ -79,183 +79,46 @@ export default function EventsPage() {
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
-      const headers: HeadersInit = {
-        'Content-Type': 'application/json'
-      };
       
-      if (token) {
-        headers['Authorization'] = `Bearer ${token.trim()}`;
+      if (!token) {
+        toast.error('Please login to view events');
+        setError('Please login to view events');
+        return;
       }
-      
+
       const response = await fetch('/api/events', {
-        headers
+        headers: {
+          'Authorization': `Bearer ${token.trim()}`,
+          'Content-Type': 'application/json'
+        }
       });
       
       if (!response.ok) {
-        throw new Error('Failed to fetch events');
+        const errorData = await response.json();
+        if (response.status === 401) {
+          localStorage.removeItem('token'); // Clear invalid token
+          toast.error('Session expired. Please login again');
+          return;
+        }
+        throw new Error(errorData.error || 'Failed to fetch events');
       }
       
       const data = await response.json();
       
       if (data.success) {
         setEvents(data.events);
+        // Initial filtering
+        filterEvents(data.events, statusFilter);
       } else {
         throw new Error(data.error || 'Failed to fetch events');
       }
     } catch (error) {
       console.error('Error fetching events:', error);
       setError(error instanceof Error ? error.message : 'Failed to fetch events');
+      toast.error(error instanceof Error ? error.message : 'Failed to fetch events');
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleVote = async (eventId: string, outcome: 'outcome1' | 'outcome2') => {
-    try {
-      const token = localStorage.getItem('token')
-      if (!token) {
-        toast.error('Please login to vote')
-        return
-      }
-
-      const response = await fetch('/api/votes', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token.trim()}`
-        },
-        body: JSON.stringify({
-          eventId,
-          outcome,
-        }),
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to vote')
-      }
-
-      toast.success(data.message || 'Vote recorded successfully')
-      await fetchAllEvents()
-    } catch (error) {
-      console.error('Vote error:', error)
-      toast.error(error instanceof Error ? error.message : 'Failed to vote')
-    }
-  };
-
-  const handleEventAction = async (eventId: string, action: 'approve' | 'reject') => {
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        toast.error('Authorization required');
-        return;
-      }
-
-      const response = await fetch('/api/admin/approve-event', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token.trim()}`
-        },
-        body: JSON.stringify({ eventId, status: action === 'approve' ? 'approved' : 'rejected' }),
-      });
-
-      const result = await response.json();
-      
-      if (result.success) {
-        toast({
-          title: "Success",
-          description: `Event ${action}ed successfully`,
-        });
-        fetchAllEvents(); // Refresh the events list
-      } else {
-        throw new Error(result.error);
-      }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : 'Failed to update event',
-        variant: "destructive",
-      });
-    }
-  };
-
-  const checkVoteStatus = async (eventId: string) => {
-    try {
-      const token = localStorage.getItem('token')
-      if (!token) return false
-
-      const response = await fetch(`/api/votes?eventId=${eventId}`, {
-        headers: {
-          'Authorization': `Bearer ${token.trim()}`
-        }
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to check vote status')
-      }
-
-      return data.hasVoted
-    } catch (error) {
-      console.error('Vote status check error:', error)
-      return false
-    }
-  };
-
-  const getUserVote = (event: Event) => {
-    const token = localStorage.getItem('token');
-    if (!token) return null;
-    
-    try {
-      const decoded = JSON.parse(atob(token.split('.')[1])) as {
-        role: string;
-        userId: string;
-      };
-      const userVote = event.votes.find(vote => vote.userId === decoded.userId);
-      return userVote?.outcome || null;
-    } catch {
-      return null;
-    }
-  };
-
-  const renderEventActions = (event: Event) => {
-    const token = localStorage.getItem('token');
-    if (!token) return null;
-    
-    try {
-      const decoded = JSON.parse(atob(token.split('.')[1])) as {
-        role: string;
-        userId: string;
-      };
-      const isAdmin = decoded.role === 'ADMIN';
-      
-      if (isAdmin && event.status === 'pending') {
-        return (
-          <div className="flex gap-2 mt-4">
-            <Button
-              onClick={() => handleEventAction(event.id, 'approve')}
-              variant="outline"
-              className="bg-green-100 hover:bg-green-200"
-            >
-              Approve
-            </Button>
-            <Button
-              onClick={() => handleEventAction(event.id, 'reject')}
-              variant="outline"
-              className="bg-red-100 hover:bg-red-200"
-            >
-              Reject
-            </Button>
-          </div>
-        );
-      }
-    } catch (error) {
-      return null;
-    }
-    return null;
   };
 
   useEffect(() => {
@@ -451,58 +314,22 @@ export default function EventsPage() {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="mt-4 space-y-4">
-                  {event.status === 'approved' && (
-                    <>
-                      <div className="flex flex-col gap-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium">{event.outcome1}</span>
-                          <span className="text-sm text-gray-500">
-                            {Math.round((event.outcome1Votes / (event.outcome1Votes + event.outcome2Votes || 1)) * 100)}%
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium">{event.outcome2}</span>
-                          <span className="text-sm text-gray-500">
-                            {Math.round((event.outcome2Votes / (event.outcome1Votes + event.outcome2Votes || 1)) * 100)}%
-                          </span>
-                        </div>
-                      </div>
+                <p className="text-sm text-gray-600 mb-4">{event.description}</p>
+                <div className="space-y-4">
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">Outcomes:</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary">{event.outcome1}</Badge>
+                      <span className="text-sm text-gray-500">vs</span>
+                      <Badge variant="secondary">{event.outcome2}</Badge>
+                    </div>
+                  </div>
 
-                      <div className="flex gap-2">
-                        <Button 
-                          onClick={() => handleVote(event.id, 'outcome1')}
-                          className={`w-full h-12 ${
-                            getUserVote(event) === 'outcome1'
-                              ? 'bg-green-600 text-white hover:bg-green-700'
-                              : 'bg-green-50 hover:bg-green-100 text-green-800'
-                          }`}
-                          disabled={false}
-                        >
-                          {event.outcome1} ↑ {getUserVote(event) === 'outcome1' && '✓'}
-                        </Button>
-                        <Button 
-                          onClick={() => handleVote(event.id, 'outcome2')}
-                          className={`w-full h-12 ${
-                            getUserVote(event) === 'outcome2'
-                              ? 'bg-red-600 text-white hover:bg-red-700'
-                              : 'bg-red-50 hover:bg-red-100 text-red-800'
-                          }`}
-                          disabled={false}
-                        >
-                          {event.outcome2} ↓ {getUserVote(event) === 'outcome2' && '✓'}
-                        </Button>
-                      </div>
-
-                      <div className="flex items-center justify-between text-sm text-gray-500">
-                        <span>{event.outcome1Votes + event.outcome2Votes} votes</span>
-                        <span className="bg-orange-100 rounded-full px-3 py-1 text-orange-700">
-                          {Math.round((event.outcome1Votes / (event.outcome1Votes + event.outcome2Votes || 1)) * 100)}% chance
-                        </span>
-                      </div>
-                    </>
-                  )}
-                  {renderEventActions(event)}
+                  <div className="flex items-center justify-between text-sm text-gray-500">
+                    <span>Resolution Source: {event.resolutionSource}</span>
+                  </div>
                 </div>
               </CardContent>
             </Card>

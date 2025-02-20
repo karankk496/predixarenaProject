@@ -54,7 +54,54 @@ export default function Page() {
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedCategory, setSelectedCategory] = useState("All");
   const router = useRouter();
+
+  const categories = [
+    "All",
+    "New",
+    "Creators",
+    "Sports",
+    "Global Elections",
+    "Mentions",
+    "Politics",
+    "Crypto",
+    "Pop Culture",
+    "Business",
+    "Science",
+  ];
+
+  // Filter events based on selected category with special handling for Live and New
+  const filteredEvents = events.filter(event => {
+    if (selectedCategory === "Live") {
+      // For Live category, show events with most total votes
+      return true; // We'll sort these later
+    }
+    if (selectedCategory === "New") {
+      // For New category, show recently created events (within last 7 days)
+      const eventDate = new Date(event.createdAt);
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      return eventDate >= sevenDaysAgo;
+    }
+    if (selectedCategory === "All") {
+      return true;
+    }
+    return event.category === selectedCategory;
+  }).sort((a, b) => {
+    if (selectedCategory === "Live") {
+      // Sort by total votes (descending) for Live category
+      const totalVotesA = a.outcome1Votes + a.outcome2Votes;
+      const totalVotesB = b.outcome1Votes + b.outcome2Votes;
+      return totalVotesB - totalVotesA;
+    }
+    if (selectedCategory === "New") {
+      // Sort by creation date (newest first) for New category
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    }
+    // Default sort by creation date
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  });
 
   const updateEventVotes = (eventId: string, oldOutcome: string | null, newOutcome: string) => {
     setEvents(currentEvents => 
@@ -298,11 +345,8 @@ export default function Page() {
         <nav className="container h-12 flex items-center gap-6 text-sm">
           <div className="w-60 pl-8"></div>
           <div className="flex-1 flex items-center justify-center gap-6">
-            <Link href="#" className="text-red-500 flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-red-500" />
-              LIVE
-            </Link>
             {[
+              "Live",
               "All",
               "New",
               "Creators",
@@ -315,9 +359,19 @@ export default function Page() {
               "Business",
               "Science",
             ].map((item) => (
-              <Link key={item} href="#" className="text-muted-foreground hover:text-foreground">
+              <button
+                key={item}
+                onClick={() => setSelectedCategory(item)}
+                className={`${
+                  item === "Live" ? "text-red-500 flex items-center gap-1" : 
+                  "text-muted-foreground hover:text-foreground transition-colors"
+                } ${
+                  selectedCategory === item ? 'text-foreground font-medium' : ''
+                }`}
+              >
+                {item === "Live" && <span className="w-2 h-2 rounded-full bg-red-500" />}
                 {item}
-              </Link>
+              </button>
             ))}
           </div>
         </nav>
@@ -483,12 +537,14 @@ export default function Page() {
           <div className="grid gap-4">
             {loading ? (
               <div className="text-center p-4">Loading events...</div>
-            ) : events.length === 0 ? (
+            ) : filteredEvents.length === 0 ? (
               <div className="text-center text-muted-foreground p-4">
-                No active predictions found
+                {selectedCategory === "All" 
+                  ? "No active predictions found"
+                  : `No active predictions found in ${selectedCategory} category`}
               </div>
             ) : (
-              events.map((event) => (
+              filteredEvents.map((event) => (
                 <PredictionMarket
                   key={event.id}
                   eventId={event.id}
@@ -497,7 +553,7 @@ export default function Page() {
                     { id: 'outcome1', name: event.outcome1, percentage: `${Math.round((event.outcome1Votes / (event.outcome1Votes + event.outcome2Votes || 1)) * 100)}%` },
                     { id: 'outcome2', name: event.outcome2, percentage: `${Math.round((event.outcome2Votes / (event.outcome1Votes + event.outcome2Votes || 1)) * 100)}%` },
                   ]}
-                  value={`${event.outcome1Votes + event.outcome2Votes} votes`}
+                  value={`${event.outcome1Votes},${event.outcome2Votes}`}
                   user={event.user}
                   resolutionDateTime={event.resolutionDateTime}
                 />
@@ -656,9 +712,19 @@ function PredictionMarket({
             {options.map((option) => (
               <div key={option.id} className="flex items-center justify-between">
                 <span className="text-sm font-medium">{option.name}</span>
-                <span className="text-sm text-gray-500">{option.percentage}</span>
+                <span className="text-sm text-gray-500">
+                  {option.id === 'outcome1' ? value.split(',')[0] : value.split(',')[1]} votes ({option.percentage})
+                </span>
               </div>
             ))}
+          </div>
+
+          {/* Total Votes */}
+          <div className="flex items-center justify-between text-sm text-gray-500">
+            <span>Total: {Number(value.split(',')[0]) + Number(value.split(',')[1])} votes</span>
+            <span className="bg-orange-100 rounded-full px-3 py-1 text-orange-700">
+              {options[0].percentage} {options[0].name}
+            </span>
           </div>
 
           {/* Voting Buttons */}
@@ -672,7 +738,7 @@ function PredictionMarket({
               }`}
               disabled={isVoting}
             >
-              {options[0].name} ↑ {userVote === 'outcome1' && '✓'}
+              {options[0].name} ({value.split(',')[0]}) ↑ {userVote === 'outcome1' && '✓'}
             </Button>
             <Button 
               onClick={() => handleVote('outcome2')}
@@ -683,7 +749,7 @@ function PredictionMarket({
               }`}
               disabled={isVoting}
             >
-              {options[1].name} ↓ {userVote === 'outcome2' && '✓'}
+              {options[1].name} ({value.split(',')[1]}) ↓ {userVote === 'outcome2' && '✓'}
             </Button>
           </div>
         </div>
