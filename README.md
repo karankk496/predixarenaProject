@@ -50,3 +50,21 @@ npx prisma studio
 ```
 The UI will be running at http://localhost:5555.
 
+
+
+**For Admin:**  
+- Can create new events.  
+- Can approve or reject events submitted by general users.  
+- Can view the list of all users in the system.  
+- Can manage user roles and permissions.  
+- Can monitor event participation and voting statistics.  
+- Has access to detailed event logs and system analytics.  
+
+**For General Users:**  
+- Can create new events.  
+- Can vote on available events.  
+- Can view their own votes, with the option to filter by event.  
+- Can edit their own profile information.  
+- Receives notifications for event updates.  
+
+
