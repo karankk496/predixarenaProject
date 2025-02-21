@@ -78,37 +78,32 @@ export default function EventsPage() {
   const fetchAllEvents = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
       
+      // Get token from localStorage
+      const token = localStorage.getItem('token');
       if (!token) {
         toast.error('Please login to view events');
-        // setError('Please login to view events');
         return;
       }
 
       const response = await fetch('/api/events', {
         headers: {
-          'Authorization': `Bearer ${token.trim()}`,
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
       
       if (!response.ok) {
         const errorData = await response.json();
-        if (response.status === 401) {
-          localStorage.removeItem('token'); // Clear invalid token
-          toast.error('Session expired. Please login again');
-          return;
-        }
         throw new Error(errorData.error || 'Failed to fetch events');
       }
-      
+
       const data = await response.json();
       
       if (data.success) {
+        console.log('Fetched events:', data.events.length);
         setEvents(data.events);
-        // Initial filtering
-        filterEvents(data.events, statusFilter);
+        setFilteredEvents(data.events);
       } else {
         throw new Error(data.error || 'Failed to fetch events');
       }
@@ -124,10 +119,6 @@ export default function EventsPage() {
   useEffect(() => {
     fetchAllEvents();
   }, []);
-
-  useEffect(() => {
-    filterEvents();
-  }, [events, statusFilter]);
 
   useEffect(() => {
     const userData = localStorage.getItem('user');
@@ -187,6 +178,10 @@ export default function EventsPage() {
       console.error('Error filtering events:', error);
     }
   };
+
+  useEffect(() => {
+    filterEvents();
+  }, [events, statusFilter]);
 
   const getStatusBadgeColor = (status: string) => {
     switch (status.toLowerCase()) {
@@ -265,9 +260,15 @@ export default function EventsPage() {
               Back
             </Button>
           </Link>
-          <Link href="/events/create">
-            <Button>Create New Event</Button>
-          </Link>
+          {localStorage.getItem('token') ? (
+            <Link href="/events/create">
+              <Button>Create New Event</Button>
+            </Link>
+          ) : (
+            <Button variant="outline" onClick={() => toast.error('Please login to create events')}>
+              Create New Event
+            </Button>
+          )}
           {user?.role === 'ADMIN' && (
             <Link href="/events/approve">
               <Button variant="outline">Approve Events</Button>

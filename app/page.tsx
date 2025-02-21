@@ -129,6 +129,66 @@ export default function Page() {
     );
   };
 
+  const fetchEvents = async () => {
+    try {
+      setLoading(true);
+      console.log('Fetching events...');
+      
+      const response = await fetch('/api/events?status=approved', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      console.log('Response status:', response.status);
+
+      const data = await response.json();
+      console.log('Response data:', data);
+
+      if (!response.ok) {
+        console.error('Error response:', data);
+        toast.error(data.error || 'Failed to fetch events');
+        setEvents([]);
+        return;
+      }
+
+      if (!data.success || !Array.isArray(data.events)) {
+        console.error('Invalid data format:', data);
+        toast.error('Invalid data format received');
+        setEvents([]);
+        return;
+      }
+
+      const now = new Date();
+      
+      // Filter for active events (where resolution date hasn't passed)
+      // and sort by most recent first
+      const activeEvents = data.events
+        .filter((event: Event) => {
+          if (!event.resolutionDateTime) {
+            console.log(`Event ${event.title}: No resolution date`);
+            return false;
+          }
+          const resolutionDate = new Date(event.resolutionDateTime);
+          const isActive = resolutionDate > now;
+          console.log(`Event ${event.title}: Resolution date: ${resolutionDate}, Is active: ${isActive}`);
+          return isActive;
+        })
+        .sort((a: Event, b: Event) => 
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+
+      console.log('Filtered active events:', activeEvents.length);
+      setEvents(activeEvents);
+    } catch (error) {
+      console.error('Error fetching events:', error);
+      toast.error('Failed to fetch events');
+      setEvents([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     const checkAuth = () => {
       const token = localStorage.getItem('token');
@@ -153,62 +213,21 @@ export default function Page() {
       }
     };
 
-    const fetchEvents = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        if (!token) {
-          setLoading(false);
-          return;
-        }
-
-        // Fetch all approved events
-        const response = await fetch('/api/events?status=approved', {
-          headers: {
-            'Authorization': `Bearer ${token.trim()}`
-          }
-        });
-
-        if (!response.ok) {
-          if (response.status === 401) {
-            toast.error('Please login to view events');
-          } else {
-            toast.error('Failed to fetch events');
-          }
-          setLoading(false);
-          return;
-        }
-
-        const data = await response.json();
-        if (data.success) {
-          const now = new Date();
-          
-          // Filter for active events (where resolution date hasn't passed)
-          // and sort by most recent first
-          const activeEvents = data.events
-            .filter((event: Event) => {
-              const resolutionDate = new Date(event.resolutionDateTime);
-              return resolutionDate > now;
-            })
-            .sort((a: Event, b: Event) => 
-              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-            );
-
-          setEvents(activeEvents);
-        }
-      } catch (error) {
-        console.error('Error:', error);
-        toast.error('Failed to fetch events');
-      } finally {
-        setLoading(false);
-      }
-    };
-
     checkAuth();
-    fetchEvents();
     const interval = setInterval(checkAuth, 10000);
     
     return () => {
       clearInterval(interval);
+    };
+  }, []);
+
+  useEffect(() => {
+    fetchEvents();
+    // Set up an interval to refresh events every minute
+    const eventInterval = setInterval(fetchEvents, 60000);
+    
+    return () => {
+      clearInterval(eventInterval);
     };
   }, []);
 
@@ -514,24 +533,26 @@ export default function Page() {
             </Card>
           </div>
 
-          {/* New Event Management Links */}
-          <div className="flex justify-center space-x-4">
-            <Button asChild variant="outline">
-              <Link href="/events/create">Create New Event</Link>
-            </Button>
-            <Button asChild variant="outline">
-              <Link href="/events">View All Events</Link>
-            </Button>
-            <Button asChild variant="outline">
-              <Link href="/vote">Vote on Predictions</Link>
-            </Button>
-            {/* Only show Approve Events button for Admin and Ops users */}
-            {userData?.role && ['ADMIN'].includes(userData.role) && (
+          {/* New Event Management Links - Only show if user is logged in */}
+          {userData && (
+            <div className="flex justify-center space-x-4">
               <Button asChild variant="outline">
-                <Link href="/admin/approve-events">Approve Events</Link>
+                <Link href="/events/create">Create New Event</Link>
               </Button>
-            )}
-          </div>
+              <Button asChild variant="outline">
+                <Link href="/events">View All Events</Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href="/vote">Vote on Predictions</Link>
+              </Button>
+              {/* Only show Approve Events button for Admin and Ops users */}
+              {userData?.role && ['ADMIN'].includes(userData.role) && (
+                <Button asChild variant="outline">
+                  <Link href="/admin/approve-events">Approve Events</Link>
+                </Button>
+              )}
+            </div>
+          )}
 
           {/* Prediction Markets */}
           <div className="grid gap-4">

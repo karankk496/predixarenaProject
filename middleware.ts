@@ -12,7 +12,7 @@ interface JWTPayload {
 }
 
 export async function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl
+  const { pathname, searchParams } = request.nextUrl
 
   // Public routes that don't need authentication
   if (
@@ -20,7 +20,9 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/api/test') ||
     pathname === '/login' ||
     pathname === '/register' ||
-    pathname === '/'
+    pathname === '/' ||
+    // Allow public access to approved events
+    (pathname === '/api/events' && searchParams.get('status') === 'approved')
   ) {
     return NextResponse.next()
   }

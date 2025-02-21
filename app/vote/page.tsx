@@ -89,37 +89,10 @@ export default function VotePage() {
   const fetchApprovedEvents = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
-      
-      if (!token) {
-        toast({
-          title: "Authentication Required",
-          description: "Please login to view events",
-          variant: "destructive",
-        });
-        setError('Please login to view events');
-        return;
-      }
-
-      const response = await fetch('/api/events?status=approved', {
-        headers: {
-          'Authorization': `Bearer ${token.trim()}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await fetch('/api/events?status=approved');
       
       if (!response.ok) {
-        const errorData = await response.json();
-        if (response.status === 401) {
-          localStorage.removeItem('token'); // Clear invalid token
-          toast({
-            title: "Session Expired",
-            description: "Please login again",
-            variant: "destructive",
-          });
-          return;
-        }
-        throw new Error(errorData.error || 'Failed to fetch approved events');
+        throw new Error('Failed to fetch approved events');
       }
       
       const data = await response.json();
@@ -413,26 +386,36 @@ export default function VotePage() {
 
                         {/* Voting Buttons */}
                         <div className="flex gap-2">
-                          <Button 
-                            onClick={() => handleVote(event.id, 'outcome1')}
-                            className={`flex-1 h-12 ${
-                              userVotes[event.id] === 'outcome1'
-                                ? 'bg-green-600 text-white hover:bg-green-700'
-                                : 'bg-green-50 hover:bg-green-100 text-green-800'
-                            }`}
-                          >
-                            {event.outcome1} ↑ {userVotes[event.id] === 'outcome1' && '✓'}
-                          </Button>
-                          <Button 
-                            onClick={() => handleVote(event.id, 'outcome2')}
-                            className={`flex-1 h-12 ${
-                              userVotes[event.id] === 'outcome2'
-                                ? 'bg-red-600 text-white hover:bg-red-700'
-                                : 'bg-red-50 hover:bg-red-100 text-red-800'
-                            }`}
-                          >
-                            {event.outcome2} ↓ {userVotes[event.id] === 'outcome2' && '✓'}
-                          </Button>
+                          {localStorage.getItem('token') ? (
+                            <>
+                              <Button 
+                                onClick={() => handleVote(event.id, 'outcome1')}
+                                className={`flex-1 h-12 ${
+                                  userVotes[event.id] === 'outcome1'
+                                    ? 'bg-green-600 text-white hover:bg-green-700'
+                                    : 'bg-green-50 hover:bg-green-100 text-green-800'
+                                }`}
+                                disabled={eventEnded}
+                              >
+                                {event.outcome1}
+                              </Button>
+                              <Button 
+                                onClick={() => handleVote(event.id, 'outcome2')}
+                                className={`flex-1 h-12 ${
+                                  userVotes[event.id] === 'outcome2'
+                                    ? 'bg-red-600 text-white hover:bg-red-700'
+                                    : 'bg-red-50 hover:bg-red-100 text-red-800'
+                                }`}
+                                disabled={eventEnded}
+                              >
+                                {event.outcome2}
+                              </Button>
+                            </>
+                          ) : (
+                            <div className="w-full text-center p-4 bg-gray-50 rounded-md">
+                              <p className="text-sm text-gray-600">Please login to vote on predictions</p>
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
