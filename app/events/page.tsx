@@ -82,7 +82,7 @@ export default function EventsPage() {
       
       if (!token) {
         toast.error('Please login to view events');
-        setError('Please login to view events');
+        // setError('Please login to view events');
         return;
       }
 
@@ -222,7 +222,7 @@ export default function EventsPage() {
   }
 
   return (
-    <div className="container mx-auto py-10">
+    <div className="container mx-auto p-4">
       <div className="flex justify-between items-center mb-6">
         <div className="flex items-center gap-4">
           <h1 className="text-2xl font-bold">All Events</h1>
@@ -246,6 +246,25 @@ export default function EventsPage() {
           </div>
         </div>
         <div className="flex gap-4">
+          <Link href="/">
+            <Button variant="outline">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="mr-2 h-4 w-4"
+              >
+                <path d="M19 12H5M12 19l-7-7 7-7" />
+              </svg>
+              Back
+            </Button>
+          </Link>
           <Link href="/events/create">
             <Button>Create New Event</Button>
           </Link>

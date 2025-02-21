@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -278,18 +279,17 @@ export default function VotePage() {
   }
 
   return (
-    <div className="container mx-auto py-10">
+    <div className="container mx-auto p-4">
       <div className="flex justify-between items-center mb-6">
         <div className="flex items-center gap-4">
-          <h1 className="text-2xl font-bold">Vote on Predictions</h1>
           <div className="flex items-center gap-2">
             <Filter className="h-4 w-4 text-muted-foreground" />
             <Select
               value={categoryFilter}
               onValueChange={setCategoryFilter}
             >
-              <SelectTrigger className="w-[160px]">
-                <SelectValue placeholder="Filter by Category" />
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Filter by category" />
               </SelectTrigger>
               <SelectContent>
                 {CATEGORY_FILTERS.map(({ value, label }) => (
@@ -300,6 +300,27 @@ export default function VotePage() {
               </SelectContent>
             </Select>
           </div>
+        </div>
+        <div className="flex items-center gap-4">
+          <Link href="/">
+            <Button variant="outline">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="mr-2 h-4 w-4"
+              >
+                <path d="M19 12H5M12 19l-7-7 7-7" />
+              </svg>
+              Back
+            </Button>
+          </Link>
         </div>
       </div>
 
