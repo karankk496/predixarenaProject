@@ -57,24 +57,36 @@ export default function Page() {
   const [selectedCategory, setSelectedCategory] = useState("All");
   const router = useRouter();
 
-  const categories = [
+  // Main categories to show directly
+  const mainCategories = [
     "All",
+    "Trending",
     "New",
     "Creators",
     "Sports",
     "Global Elections",
-    "Mentions",
     "Politics",
     "Crypto",
-    "Pop Culture",
     "Business",
-    "Science",
   ];
 
-  // Filter events based on selected category with special handling for Live and New
+  // Additional categories for the More dropdown
+  const moreCategories = [
+    "Technology",
+    "Entertainment",
+    "Gaming",
+    "Music",
+    "Movies",
+    "TV Shows",
+    "Pop Culture",
+    "Science",
+    "Mentions"
+  ];
+
+  // Filter events based on selected category with special handling for Trending and New
   const filteredEvents = events.filter(event => {
-    if (selectedCategory === "Live") {
-      // For Live category, show events with most total votes
+    if (selectedCategory === "Trending") {
+      // For Trending category, show events with most total votes
       return true; // We'll sort these later
     }
     if (selectedCategory === "New") {
@@ -85,12 +97,17 @@ export default function Page() {
       return eventDate >= sevenDaysAgo;
     }
     if (selectedCategory === "All") {
-      return true;
+      // Show events that will end within 1 day
+      const now = new Date();
+      const oneDayFromNow = new Date(now);
+      oneDayFromNow.setDate(now.getDate() + 5);
+      const resolutionDate = new Date(event.resolutionDateTime);
+      return resolutionDate <= oneDayFromNow && resolutionDate > now;
     }
     return event.category === selectedCategory;
   }).sort((a, b) => {
-    if (selectedCategory === "Live") {
-      // Sort by total votes (descending) for Live category
+    if (selectedCategory === "Trending") {
+      // Sort by total votes (descending) for Trending category
       const totalVotesA = a.outcome1Votes + a.outcome2Votes;
       const totalVotesB = b.outcome1Votes + b.outcome2Votes;
       return totalVotesB - totalVotesA;
@@ -98,6 +115,10 @@ export default function Page() {
     if (selectedCategory === "New") {
       // Sort by creation date (newest first) for New category
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    }
+    if (selectedCategory === "All") {
+      // Sort by resolution date (ending soonest first) for All category
+      return new Date(a.resolutionDateTime).getTime() - new Date(b.resolutionDateTime).getTime();
     }
     // Default sort by creation date
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
@@ -364,34 +385,48 @@ export default function Page() {
         <nav className="container h-12 flex items-center gap-6 text-sm">
           <div className="w-60 pl-8"></div>
           <div className="flex-1 flex items-center justify-center gap-6">
-            {[
-              "Live",
-              "All",
-              "New",
-              "Creators",
-              "Sports",
-              "Global Elections",
-              "Mentions",
-              "Politics",
-              "Crypto",
-              "Pop Culture",
-              "Business",
-              "Science",
-            ].map((item) => (
-              <button
-                key={item}
-                onClick={() => setSelectedCategory(item)}
-                className={`${
-                  item === "Live" ? "text-red-500 flex items-center gap-1" : 
-                  "text-muted-foreground hover:text-foreground transition-colors"
-                } ${
-                  selectedCategory === item ? 'text-foreground font-medium' : ''
+            {mainCategories.map((category) => (
+              <Button
+                key={category}
+                onClick={() => setSelectedCategory(category)}
+                variant={selectedCategory === category ? "default" : "outline"}
+                className={`whitespace-nowrap ${
+                  selectedCategory === category 
+                    ? "bg-gradient-to-r from-[#4A5AB9] to-[#8250C4] text-white" 
+                    : ""
                 }`}
               >
-                {item === "Live" && <span className="w-2 h-2 rounded-full bg-red-500" />}
-                {item}
-              </button>
+                {category}
+              </Button>
             ))}
+            
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button 
+                  variant="outline" 
+                  className={`whitespace-nowrap ${
+                    moreCategories.includes(selectedCategory) 
+                      ? "bg-gradient-to-r from-[#4A5AB9] to-[#8250C4] text-white" 
+                      : ""
+                  }`}
+                >
+                  More
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                {moreCategories.map((category) => (
+                  <DropdownMenuItem
+                    key={category}
+                    onClick={() => setSelectedCategory(category)}
+                    className={`cursor-pointer ${
+                      selectedCategory === category ? "bg-gradient-to-r from-[#4A5AB9] to-[#8250C4] text-white" : ""
+                    }`}
+                  >
+                    {category}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </nav>
       </header>
@@ -514,40 +549,56 @@ export default function Page() {
         <main className="space-y-6">
           {/* Featured Cards */}
           <div className="grid grid-cols-2 gap-4">
-            <Card className="bg-[#4A5AB9] text-white">
-              <CardContent className="p-6">
-                <h3 className="text-lg font-semibold mb-4">2024 Election Results</h3>
-                <Button variant="secondary" size="sm">
-                  View
-                </Button>
-              </CardContent>
-            </Card>
-            <Card className="bg-[#8250C4] text-white">
-              <CardContent className="p-6">
-                <h3 className="text-lg font-semibold mb-4">Mention Markets</h3>
-                <p className="mb-4">What will they say?</p>
-                <Button variant="secondary" size="sm">
-                  Trade now
-                </Button>
-              </CardContent>
-            </Card>
+            {events
+              .slice()
+              .sort((a, b) => (b.outcome1Votes + b.outcome2Votes) - (a.outcome1Votes + a.outcome2Votes))
+              .slice(0, 2)
+              .map((event, index) => (
+                <Card key={event.id} className={index === 0 ? "bg-[#4A5AB9] text-white" : "bg-[#8250C4] text-white"}>
+                  <CardContent className="p-6">
+                    <h3 className="text-lg font-semibold mb-4">{event.title}</h3>
+                    <p className="mb-4">
+                      {event.outcome1}: {Math.round((event.outcome1Votes / (event.outcome1Votes + event.outcome2Votes || 1)) * 100)}%
+                    </p>
+                    <Button variant="secondary" size="sm">
+                      View
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))}
           </div>
 
           {/* New Event Management Links - Only show if user is logged in */}
           {userData && (
             <div className="flex justify-center space-x-4">
-              <Button asChild variant="outline">
+              <Button 
+                asChild 
+                variant="default"
+                className="bg-gradient-to-r from-[#4A5AB9] to-[#6B3FA8] hover:opacity-90 text-white"
+              >
                 <Link href="/events/create">Create New Event</Link>
               </Button>
-              <Button asChild variant="outline">
+              <Button 
+                asChild 
+                variant="default"
+                className="bg-gradient-to-r from-[#8250C4] to-[#4A5AB9] hover:opacity-90 text-white"
+              >
                 <Link href="/events">View All Events</Link>
               </Button>
-              <Button asChild variant="outline">
+              <Button 
+                asChild 
+                variant="default"
+                className="bg-gradient-to-r from-[#6B3FA8] to-[#8250C4] hover:opacity-90 text-white"
+              >
                 <Link href="/vote">Vote on Predictions</Link>
               </Button>
               {/* Only show Approve Events button for Admin and Ops users */}
               {userData?.role && ['ADMIN'].includes(userData.role) && (
-                <Button asChild variant="outline">
+                <Button 
+                  asChild 
+                  variant="default"
+                  className="bg-gradient-to-r from-[#8250C4] to-[#4A5AB9] hover:opacity-90 text-white"
+                >
                   <Link href="/admin/approve-events">Approve Events</Link>
                 </Button>
               )}

@@ -64,6 +64,7 @@
     --input: 220 20% 25%;
     --ring: 220 80% 50%;
   }
+  
 }
 
 @layer base {
@@ -74,4 +75,5 @@
     @apply bg-background text-foreground;
   }
 }
+
 

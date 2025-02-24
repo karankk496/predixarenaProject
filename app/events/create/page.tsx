@@ -151,7 +151,7 @@ export default function CreateEventPage() {
         throw new Error(data.error || 'Failed to create event');
       }
 
-      toast.success('Event created successfully!');
+      toast.success('Event created successfully! now awaits admin approval');
       setFormData({  // Reset form
         title: '',
         description: '',
