@@ -4,8 +4,8 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider          = "postgresql"
+  url               = env("DATABASE_URL")
   shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 }
 
@@ -74,35 +74,33 @@ model VerificationToken {
 }
 
 model Vote {
-  id        String   @id @default(cuid())
-  eventId   String
-  userId    String
-  outcome   String   // 'outcome1' or 'outcome2'
-  event     Event    @relation("EventVotes", fields: [eventId], references: [id], onDelete: Cascade)
-  user      User     @relation("UserVotes", fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(cuid())
+  eventId      String
+  userId       String
+  outcomeIndex Int     // Index of the selected outcome
+  event        Event   @relation("EventVotes", fields: [eventId], references: [id], onDelete: Cascade)
+  user         User    @relation("UserVotes", fields: [userId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@unique([eventId, userId]) // Ensures one vote per user per event
 }
 
 model Event {
-  id                String   @id @default(cuid())
-  title             String
-  description       String
-  category          String
-  outcome1          String
-  outcome2          String
-  resolutionSource  String?
+  id                 String   @id @default(cuid())
+  title              String
+  description        String
+  category           String
+  outcomes           String[] // Array of outcomes
+  outcomeVotes       Int[]    // Array of vote counts for each outcome
+  resolutionSource   String?
   resolutionDateTime DateTime
-  status            String   @default("pending")
-  outcome1Votes     Int      @default(0)
-  outcome2Votes     Int      @default(0)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  userId            String
-  user              User     @relation("UserEvents", fields: [userId], references: [id])
-  votes             Vote[]   @relation("EventVotes")
+  status             String   @default("pending")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  userId             String
+  user               User     @relation("UserEvents", fields: [userId], references: [id])
+  votes              Vote[]   @relation("EventVotes")
 
   @@unique([title, category])
 }

@@ -262,6 +262,17 @@ export async function POST(req: Request) {
     // Parse and validate event data
     const body = await req.json()
     
+    // Validate outcomes
+    if (!Array.isArray(body.outcomes) || body.outcomes.length < 2 || body.outcomes.length > 8) {
+      return new NextResponse(JSON.stringify({
+        success: false,
+        error: 'Events must have between 2 and 8 outcomes'
+      }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
     // Convert category to proper case
     const formattedCategory = body.category.charAt(0).toUpperCase() + 
                            body.category.slice(1).toLowerCase();
@@ -283,13 +294,11 @@ export async function POST(req: Request) {
         title: body.title,
         description: body.description,
         category: formattedCategory,
-        outcome1: body.outcome1,
-        outcome2: body.outcome2,
+        outcomes: body.outcomes,
+        outcomeVotes: new Array(body.outcomes.length).fill(0), // Initialize vote counts
         resolutionSource: body.resolutionSource,
         resolutionDateTime: new Date(body.resolutionDateTime),
         status: "pending", // All events start as pending
-        outcome1Votes: 0,
-        outcome2Votes: 0,
         userId: user.id
       }
     });

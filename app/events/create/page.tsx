@@ -24,8 +24,7 @@ const eventSchema = z.object({
   title: z.string().min(1, "Title is required").max(100, "Title must not exceed 100 characters"),
   description: z.string().min(1, "Description is required").max(2000, "Description must not exceed 2000 characters"),
   category: z.string().min(1, "Category is required"),
-  outcome1: z.string().min(1, "Outcome 1 is required"),
-  outcome2: z.string().min(1, "Outcome 2 is required"),
+  outcomes: z.array(z.string()).min(2, "At least 2 outcomes are required").max(8, "Maximum 8 outcomes allowed"),
   resolutionSource: z.string().min(1, "Resolution source is required").max(500, "Resolution source must not exceed 500 characters"),
   resolutionDateTime: z.string().min(1, "Resolution date and time is required"),
 })
@@ -59,8 +58,7 @@ interface FormErrors {
   title?: string;
   description?: string;
   category?: string;
-  outcome1?: string;
-  outcome2?: string;
+  outcomes?: string[];
   resolutionSource?: string;
   resolutionDateTime?: string;
 }
@@ -73,8 +71,7 @@ export default function CreateEventPage() {
     title: '',
     description: '',
     category: '' as Category,
-    outcome1: '',
-    outcome2: '',
+    outcomes: ['', ''], // Start with 2 empty outcomes
     resolutionSource: '',
     resolutionDateTime: ''
   });
@@ -94,12 +91,10 @@ export default function CreateEventPage() {
       newErrors.category = 'Category is required';
     }
 
-    if (!formData.outcome1.trim()) {
-      newErrors.outcome1 = 'Outcome 1 is required';
-    }
-
-    if (!formData.outcome2.trim()) {
-      newErrors.outcome2 = 'Outcome 2 is required';
+    // Validate outcomes
+    const validOutcomes = formData.outcomes.filter(outcome => outcome.trim());
+    if (validOutcomes.length < 2) {
+      newErrors.outcomes = ['At least 2 outcomes are required'];
     }
 
     if (!formData.resolutionSource.trim()) {
@@ -114,8 +109,38 @@ export default function CreateEventPage() {
     return Object.keys(newErrors).length === 0;
   };
 
+  const handleAddOutcome = () => {
+    if (formData.outcomes.length < 8) {
+      setFormData(prev => ({
+        ...prev,
+        outcomes: [...prev.outcomes, '']
+      }));
+    }
+  };
+
+  const handleRemoveOutcome = (index: number) => {
+    if (formData.outcomes.length > 2) {
+      setFormData(prev => ({
+        ...prev,
+        outcomes: prev.outcomes.filter((_, i) => i !== index)
+      }));
+    }
+  };
+
+  const handleOutcomeChange = (index: number, value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      outcomes: prev.outcomes.map((outcome, i) => i === index ? value : outcome)
+    }));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!validateForm()) {
+      return;
+    }
+    
     setLoading(true);
 
     try {
@@ -127,18 +152,31 @@ export default function CreateEventPage() {
         return;
       }
 
+      // Filter out empty outcomes
+      const validOutcomes = formData.outcomes.filter(outcome => outcome.trim());
+      
+      // Create the request payload with the new format
+      const eventPayload = {
+        title: formData.title.trim(),
+        description: formData.description.trim(),
+        category: formData.category,
+        outcomes: validOutcomes,
+        outcomeVotes: new Array(validOutcomes.length).fill(0), // Initialize vote counts to 0
+        resolutionSource: formData.resolutionSource.trim(),
+        resolutionDateTime: formData.resolutionDateTime,
+      };
+
       const response = await fetch('/api/events', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}` // Add auth token
+          'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(eventPayload),
       });
 
-      const data = await response.json();
-
       if (!response.ok) {
+        const errorData = await response.json();
         if (response.status === 401) {
           toast.error('Please login again');
           router.push('/login');
@@ -148,19 +186,22 @@ export default function CreateEventPage() {
           toast.error('Only admin users can create events');
           return;
         }
-        throw new Error(data.error || 'Failed to create event');
+        throw new Error(errorData.error || 'Failed to create event');
       }
 
+      const data = await response.json();
       toast.success('Event created successfully! now awaits admin approval');
-      setFormData({  // Reset form
+      
+      // Reset form
+      setFormData({
         title: '',
         description: '',
         category: '' as Category,
-        outcome1: '',
-        outcome2: '',
+        outcomes: ['', ''], // Reset to two empty outcomes
         resolutionSource: '',
         resolutionDateTime: ''
       });
+      
     } catch (error) {
       console.error('Error:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to create event');
@@ -266,44 +307,56 @@ export default function CreateEventPage() {
               )}
             </div>
 
-            <div className="space-y-2">
-              <label
-                htmlFor="outcome1"
-                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-              >
-                Outcome 1
-              </label>
-              <Input
-                id="outcome1"
-                name="outcome1"
-                value={formData.outcome1}
-                onChange={e => handleChange(e, 'outcome1')}
-                className={errors.outcome1 ? "border-red-500" : ""}
-              />
-              {errors.outcome1 && (
-                <div className="text-red-600 text-sm mt-1 font-medium">
-                  {errors.outcome1}
+            {/* Outcomes Section */}
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <label className="text-sm font-medium leading-none">
+                  Outcomes
+                </label>
+                {formData.outcomes.length < 8 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleAddOutcome}
+                  >
+                    Add Outcome
+                  </Button>
+                )}
+              </div>
+              
+              {formData.outcomes.map((outcome, index) => (
+                <div key={index} className="flex gap-2 items-start">
+                  <div className="flex-1 space-y-2">
+                    <label
+                      htmlFor={`outcome${index + 1}`}
+                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                    >
+                      Outcome {index + 1}
+                    </label>
+                    <Input
+                      id={`outcome${index + 1}`}
+                      value={outcome}
+                      onChange={(e) => handleOutcomeChange(index, e.target.value)}
+                      className={errors.outcomes ? "border-red-500" : ""}
+                    />
+                  </div>
+                  {index >= 2 && (
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="icon"
+                      className="mt-8"
+                      onClick={() => handleRemoveOutcome(index)}
+                    >
+                      ×
+                    </Button>
+                  )}
                 </div>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <label
-                htmlFor="outcome2"
-                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-              >
-                Outcome 2
-              </label>
-              <Input
-                id="outcome2"
-                name="outcome2"
-                value={formData.outcome2}
-                onChange={e => handleChange(e, 'outcome2')}
-                className={errors.outcome2 ? "border-red-500" : ""}
-              />
-              {errors.outcome2 && (
+              ))}
+              {errors.outcomes && (
                 <div className="text-red-600 text-sm mt-1 font-medium">
-                  {errors.outcome2}
+                  {errors.outcomes}
                 </div>
               )}
             </div>

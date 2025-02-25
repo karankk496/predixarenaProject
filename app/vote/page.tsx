@@ -21,13 +21,11 @@ interface Event {
   title: string;
   description: string;
   category: string;
-  outcome1: string;
-  outcome2: string;
+  outcomes: string[];
+  outcomeVotes: number[];
   status: string;
   resolutionSource: string;
   resolutionDateTime: string;
-  outcome1Votes: number;
-  outcome2Votes: number;
   createdAt: string;
   user: {
     image?: string;
@@ -37,7 +35,7 @@ interface Event {
 
 interface Vote {
   eventId: string;
-  outcome: 'outcome1' | 'outcome2';
+  outcomeIndex: number;
   userId: string;
 }
 
@@ -140,7 +138,7 @@ export default function VotePage() {
       if (data.success) {
         const votesMap: Record<string, string> = {};
         data.votes.forEach((vote: Vote) => {
-          votesMap[vote.eventId] = vote.outcome;
+          votesMap[vote.eventId] = vote.outcomeIndex.toString();
         });
         setUserVotes(votesMap);
       }
@@ -149,16 +147,20 @@ export default function VotePage() {
     }
   };
 
-  const handleVote = async (eventId: string, outcome: 'outcome1' | 'outcome2') => {
+  const handleVote = async (eventId: string, outcomeIndex: number) => {
     try {
       const token = localStorage.getItem('token')
       if (!token) {
-        toast.error('Please login to vote')
-        return
+        toast({
+          title: "Error",
+          description: 'Please login to vote',
+          variant: "destructive",
+        });
+        return;
       }
 
-      if (userVotes[eventId] === outcome) {
-        return
+      if (userVotes[eventId] === outcomeIndex.toString()) {
+        return;
       }
 
       const response = await fetch('/api/votes', {
@@ -169,7 +171,7 @@ export default function VotePage() {
         },
         body: JSON.stringify({
           eventId,
-          outcome
+          outcomeIndex
         }),
       });
 
@@ -177,8 +179,12 @@ export default function VotePage() {
 
       if (!response.ok) {
         if (response.status === 401) {
-          toast.error('Please login to vote')
-          return
+          toast({
+            title: "Error",
+            description: 'Please login to vote',
+            variant: "destructive",
+          });
+          return;
         }
         throw new Error(data.error || 'Failed to vote');
       }
@@ -186,26 +192,31 @@ export default function VotePage() {
       // Update local state
       setUserVotes(prev => ({
         ...prev,
-        [eventId]: outcome
+        [eventId]: outcomeIndex.toString()
       }));
 
       // Update event vote counts
       setEvents(prevEvents => 
         prevEvents.map(event => {
           if (event.id === eventId) {
-            const prevOutcome = userVotes[eventId];
+            const prevVote = userVotes[eventId];
             const newEvent = { ...event };
+            const newVotes = [...event.outcomeVotes];
 
             // If user hasn't voted before, just increment the new vote
-            if (!prevOutcome) {
-              newEvent[`${outcome}Votes`] = event[`${outcome}Votes`] + 1;
+            if (!prevVote) {
+              newVotes[outcomeIndex]++;
             } else {
-              // If changing vote, decrement old vote and increment new vote
-              newEvent[`${prevOutcome}Votes`] = event[`${prevOutcome}Votes`] - 1;
-              newEvent[`${outcome}Votes`] = event[`${outcome}Votes`] + 1;
+              // If changing vote, decrement previous vote and increment new vote
+              const prevIndex = parseInt(prevVote);
+              newVotes[prevIndex]--;
+              newVotes[outcomeIndex]++;
             }
 
-            return newEvent;
+            return {
+              ...newEvent,
+              outcomeVotes: newVotes
+            };
           }
           return event;
         })
@@ -213,10 +224,10 @@ export default function VotePage() {
 
       toast({
         title: "Success",
-        description: data.message || "Vote recorded successfully",
+        description: "Your vote has been recorded",
       });
     } catch (error) {
-      console.error('Vote error:', error);
+      console.error('Error voting:', error);
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : 'Failed to vote',
@@ -318,6 +329,7 @@ export default function VotePage() {
           {filteredEvents.map((event) => {
             const hasVoted = userVotes[event.id];
             const eventEnded = isEventEnded(event.resolutionDateTime);
+            const totalVotes = event.outcomeVotes.reduce((sum, votes) => sum + votes, 0);
             
             return (
               <Card key={event.id} className="shadow-sm">
@@ -356,61 +368,39 @@ export default function VotePage() {
                       <span className="text-sm font-medium">{event.user?.displayName || 'Anonymous'}</span>
                     </div>
 
-                    {/* Rest of the content */}
-                    <p className="text-sm text-muted-foreground mb-4">{event.description}</p>
                     {!eventEnded && (
                       <div className="mt-4 space-y-4">
-                        {/* Title and Chance */}
-                        <div className="flex items-center justify-between">
-                          <h3 className="text-lg font-medium">{event.title}</h3>
-                          <div className="text-gray-500">
-                            {Math.round((event.outcome1Votes / (event.outcome1Votes + event.outcome2Votes || 1)) * 100)}% chance
-                          </div>
-                        </div>
-
                         {/* Options with Percentages */}
                         <div className="flex flex-col gap-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm font-medium">{event.outcome1}</span>
-                            <span className="text-sm text-gray-500">
-                              {Math.round((event.outcome1Votes / (event.outcome1Votes + event.outcome2Votes || 1)) * 100)}%
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm font-medium">{event.outcome2}</span>
-                            <span className="text-sm text-gray-500">
-                              {Math.round((event.outcome2Votes / (event.outcome1Votes + event.outcome2Votes || 1)) * 100)}%
-                            </span>
-                          </div>
+                          {event.outcomes.map((outcome, index) => (
+                            <div key={index} className="flex items-center justify-between">
+                              <span className="text-sm font-medium">{outcome}</span>
+                              <span className="text-sm text-gray-500">
+                                {Math.round((event.outcomeVotes[index] / (totalVotes || 1)) * 100)}%
+                              </span>
+                            </div>
+                          ))}
                         </div>
 
                         {/* Voting Buttons */}
                         <div className="flex gap-2">
                           {localStorage.getItem('token') ? (
-                            <>
-                              <Button 
-                                onClick={() => handleVote(event.id, 'outcome1')}
-                                className={`flex-1 h-12 ${
-                                  userVotes[event.id] === 'outcome1'
-                                    ? 'bg-green-600 text-white hover:bg-green-700'
-                                    : 'bg-green-50 hover:bg-green-100 text-green-800'
-                                }`}
-                                disabled={eventEnded}
-                              >
-                                {event.outcome1}
-                              </Button>
-                              <Button 
-                                onClick={() => handleVote(event.id, 'outcome2')}
-                                className={`flex-1 h-12 ${
-                                  userVotes[event.id] === 'outcome2'
-                                    ? 'bg-red-600 text-white hover:bg-red-700'
-                                    : 'bg-red-50 hover:bg-red-100 text-red-800'
-                                }`}
-                                disabled={eventEnded}
-                              >
-                                {event.outcome2}
-                              </Button>
-                            </>
+                            <div className="flex flex-wrap gap-2 w-full">
+                              {event.outcomes.map((outcome, index) => (
+                                <Button 
+                                  key={index}
+                                  onClick={() => handleVote(event.id, index)}
+                                  className={`flex-1 h-12 ${
+                                    userVotes[event.id] === index.toString()
+                                      ? 'bg-green-600 text-white hover:bg-green-700'
+                                      : 'bg-green-50 hover:bg-green-100 text-green-800'
+                                  }`}
+                                  disabled={loading}
+                                >
+                                  {outcome}
+                                </Button>
+                              ))}
+                            </div>
                           ) : (
                             <div className="w-full text-center p-4 bg-gray-50 rounded-md">
                               <p className="text-sm text-gray-600">Please login to vote on predictions</p>
@@ -419,6 +409,7 @@ export default function VotePage() {
                         </div>
                       </div>
                     )}
+
                     {eventEnded && (
                       <div className="mt-4">
                         <p className="text-center text-muted-foreground">
@@ -426,6 +417,11 @@ export default function VotePage() {
                         </p>
                       </div>
                     )}
+
+                    <div className="mt-4 text-sm text-gray-500">
+                      <p>Resolution Source: {event.resolutionSource}</p>
+                      <p>Total Votes: {totalVotes}</p>
+                    </div>
                   </div>
                 </CardContent>
               </Card>

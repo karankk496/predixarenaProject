@@ -25,12 +25,10 @@ interface Event {
   title: string;
   description: string;
   category: string;
-  outcome1: string;
-  outcome2: string;
+  outcomes: string[];
+  outcomeVotes: number[];
   status: string;
   resolutionDateTime: string;
-  outcome1Votes: number;
-  outcome2Votes: number;
   createdAt: string;
   user: {
     image?: string;
@@ -86,18 +84,15 @@ export default function Page() {
   // Filter events based on selected category with special handling for Trending and New
   const filteredEvents = events.filter(event => {
     if (selectedCategory === "Trending") {
-      // For Trending category, show events with most total votes
       return true; // We'll sort these later
     }
     if (selectedCategory === "New") {
-      // For New category, show recently created events (within last 7 days)
       const eventDate = new Date(event.createdAt);
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
       return eventDate >= sevenDaysAgo;
     }
     if (selectedCategory === "All") {
-      // Show events that will end within 1 day
       const now = new Date();
       const oneDayFromNow = new Date(now);
       oneDayFromNow.setDate(now.getDate() + 5);
@@ -108,19 +103,16 @@ export default function Page() {
   }).sort((a, b) => {
     if (selectedCategory === "Trending") {
       // Sort by total votes (descending) for Trending category
-      const totalVotesA = a.outcome1Votes + a.outcome2Votes;
-      const totalVotesB = b.outcome1Votes + b.outcome2Votes;
+      const totalVotesA = a.outcomeVotes.reduce((sum, votes) => sum + votes, 0);
+      const totalVotesB = b.outcomeVotes.reduce((sum, votes) => sum + votes, 0);
       return totalVotesB - totalVotesA;
     }
     if (selectedCategory === "New") {
-      // Sort by creation date (newest first) for New category
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     }
     if (selectedCategory === "All") {
-      // Sort by resolution date (ending soonest first) for All category
       return new Date(a.resolutionDateTime).getTime() - new Date(b.resolutionDateTime).getTime();
     }
-    // Default sort by creation date
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
   });
 
@@ -131,18 +123,12 @@ export default function Page() {
           const updatedEvent = { ...event };
           // If there was a previous vote, decrement it
           if (oldOutcome) {
-            if (oldOutcome === 'outcome1') {
-              updatedEvent.outcome1Votes--;
-            } else {
-              updatedEvent.outcome2Votes--;
-            }
+            const outcomeIndex = parseInt(oldOutcome);
+            updatedEvent.outcomeVotes[outcomeIndex]--;
           }
           // Increment the new vote
-          if (newOutcome === 'outcome1') {
-            updatedEvent.outcome1Votes++;
-          } else {
-            updatedEvent.outcome2Votes++;
-          }
+          const newOutcomeIndex = parseInt(newOutcome);
+          updatedEvent.outcomeVotes[newOutcomeIndex]++;
           return updatedEvent;
         }
         return event;
@@ -435,6 +421,72 @@ export default function Page() {
       <div className="container py-6 grid grid-cols-[240px,1fr] gap-6">
         {/* Sidebar */}
         <aside className="space-y-2">
+          <Link 
+            href="/events/create" 
+            className="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-muted text-muted-foreground"
+          >
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path
+                d="M10 4V16M4 10H16"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            CREATE NEW EVENT
+          </Link>
+
+          <Link 
+            href="/events" 
+            className="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-muted text-muted-foreground"
+          >
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path
+                d="M2 4H18M2 8H18M2 12H18M2 16H18"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            VIEW MY EVENTS
+          </Link>
+
+          <Link 
+            href="/vote" 
+            className="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-muted text-muted-foreground"
+          >
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path
+                d="M10 2L12 7H18L14 11L16 17L10 13L4 17L6 11L2 7H8L10 2Z"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            VOTE ON PREDICTIONS
+          </Link>
+
+          {/* {userData?.role === 'admin' && (
+            <Link 
+              href="/approve" 
+              className="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-muted text-muted-foreground"
+            >
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path
+                  d="M16 6L8 14L4 10"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              APPROVE EVENTS
+            </Link>
+          )} */}
+
           <Link href="#" className="flex items-center gap-3 px-4 py-2 rounded-lg bg-blue-50 text-blue-600 font-medium">
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path
@@ -454,6 +506,7 @@ export default function Page() {
             </svg>
             LEARN
           </Link>
+
           <Link href="#" className="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-muted text-muted-foreground">
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path
@@ -487,6 +540,8 @@ export default function Page() {
             </svg>
             LEADERBOARDS
           </Link>
+          
+
           <Link href="#" className="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-muted text-muted-foreground">
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path
@@ -546,19 +601,19 @@ export default function Page() {
         </aside>
 
         {/* Main Content */}
-        <main className="space-y-6">
-          {/* Featured Cards */}
+         <main className="space-y-6">
+         
           <div className="grid grid-cols-2 gap-4">
             {events
               .slice()
-              .sort((a, b) => (b.outcome1Votes + b.outcome2Votes) - (a.outcome1Votes + a.outcome2Votes))
+              .sort((a, b) => (b.outcomeVotes.reduce((sum, votes) => sum + votes, 0) - (a.outcomeVotes.reduce((sum, votes) => sum + votes, 0))))
               .slice(0, 2)
               .map((event, index) => (
                 <Card key={event.id} className={index === 0 ? "bg-[#4A5AB9] text-white" : "bg-[#8250C4] text-white"}>
                   <CardContent className="p-6">
                     <h3 className="text-lg font-semibold mb-4">{event.title}</h3>
                     <p className="mb-4">
-                      {event.outcome1}: {Math.round((event.outcome1Votes / (event.outcome1Votes + event.outcome2Votes || 1)) * 100)}%
+                      {event.outcomes[0]}: {Math.round((event.outcomeVotes[0] / (event.outcomeVotes.reduce((sum, votes) => sum + votes, 0) || 1)) * 100)}%
                     </p>
                     <Button variant="secondary" size="sm">
                       View
@@ -566,10 +621,10 @@ export default function Page() {
                   </CardContent>
                 </Card>
               ))}
-          </div>
+          </div> 
 
           {/* New Event Management Links - Only show if user is logged in */}
-          {userData && (
+          {/* {userData && (
             <div className="flex justify-center space-x-4">
               <Button 
                 asChild 
@@ -581,7 +636,7 @@ export default function Page() {
               <Button 
                 asChild 
                 variant="default"
-                className="bg-gradient-to-r from-[#8250C4] to-[#4A5AB9] hover:opacity-90 text-white"
+                className="bg-gradient-to-r from-[#4A5AB9] to-[#6B3FA8] hover:opacity-90 text-white"
               >
                 <Link href="/events">View All Events</Link>
               </Button>
@@ -590,20 +645,19 @@ export default function Page() {
                 variant="default"
                 className="bg-gradient-to-r from-[#6B3FA8] to-[#8250C4] hover:opacity-90 text-white"
               >
-                <Link href="/vote">Vote on Predictions</Link>
+                <Link href="/vote">Vote on Predictions</Link> 
               </Button>
-              {/* Only show Approve Events button for Admin and Ops users */}
               {userData?.role && ['ADMIN'].includes(userData.role) && (
                 <Button 
                   asChild 
                   variant="default"
-                  className="bg-gradient-to-r from-[#8250C4] to-[#4A5AB9] hover:opacity-90 text-white"
+                  className="bg-gradient-to-r from-[#8250C4] to-[#9C27B0] hover:opacity-90 text-white"
                 >
-                  <Link href="/admin/approve-events">Approve Events</Link>
+                  <Link href="/approve">Approve Events</Link>
                 </Button>
               )}
             </div>
-          )}
+          )} */}
 
           {/* Prediction Markets */}
           <div className="grid gap-4">
@@ -616,20 +670,27 @@ export default function Page() {
                   : `No active predictions found in ${selectedCategory} category`}
               </div>
             ) : (
-              filteredEvents.map((event) => (
-                <PredictionMarket
-                  key={event.id}
-                  eventId={event.id}
-                  title={event.title}
-                  options={[
-                    { id: 'outcome1', name: event.outcome1, percentage: `${Math.round((event.outcome1Votes / (event.outcome1Votes + event.outcome2Votes || 1)) * 100)}%` },
-                    { id: 'outcome2', name: event.outcome2, percentage: `${Math.round((event.outcome2Votes / (event.outcome1Votes + event.outcome2Votes || 1)) * 100)}%` },
-                  ]}
-                  value={`${event.outcome1Votes},${event.outcome2Votes}`}
-                  user={event.user}
-                  resolutionDateTime={event.resolutionDateTime}
-                />
-              ))
+              filteredEvents.map((event) => {
+                const totalVotes = event.outcomeVotes.reduce((sum, votes) => sum + votes, 0);
+                const leadingOutcomeIndex = event.outcomeVotes.indexOf(Math.max(...event.outcomeVotes));
+                
+                return (
+                  <PredictionMarket
+                    key={event.id}
+                    eventId={event.id}
+                    title={event.title}
+                    options={event.outcomes.map((outcome, index) => ({
+                      id: index.toString(),
+                      name: outcome,
+                      percentage: `${Math.round((event.outcomeVotes[index] / (totalVotes || 1)) * 100)}%`,
+                      votes: event.outcomeVotes[index]
+                    }))}
+                    value={event.outcomeVotes.join(',')}
+                    user={event.user}
+                    resolutionDateTime={event.resolutionDateTime}
+                  />
+                );
+              })
             )}
           </div>
         </main>
@@ -655,7 +716,7 @@ function PredictionMarket({
   resolutionDateTime,
 }: {
   title: string
-  options: { id: string; name: string; percentage: string }[]
+  options: { id: string; name: string; percentage: string; votes: number }[]
   value: string
   eventId: string
   user: {
@@ -666,6 +727,10 @@ function PredictionMarket({
 }) {
   const [userVote, setUserVote] = useState<string | null>(null);
   const [isVoting, setIsVoting] = useState(false);
+  const totalVotes = options.reduce((sum, option) => sum + option.votes, 0);
+  const leadingOption = options.reduce((max, option) => 
+    option.votes > max.votes ? option : max, options[0]
+  );
 
   useEffect(() => {
     const fetchUserVote = async () => {
@@ -683,7 +748,7 @@ function PredictionMarket({
 
         const data = await response.json();
         if (data.success && data.vote) {
-          setUserVote(data.vote.outcome);
+          setUserVote(data.vote.outcomeIndex.toString());
         }
       } catch (error) {
         console.error('Error fetching user vote:', error);
@@ -710,7 +775,7 @@ function PredictionMarket({
         },
         body: JSON.stringify({
           eventId: eventId,
-          outcome: outcomeId
+          outcomeIndex: parseInt(outcomeId)
         }),
       });
 
@@ -721,7 +786,8 @@ function PredictionMarket({
 
       const data = await response.json();
       if (data.success) {
-        // Update vote counts locally
+        setUserVote(outcomeId);
+        toast.success('Vote submitted successfully!');
         window.dispatchEvent(new CustomEvent('updateVotes', { 
           detail: { 
             eventId, 
@@ -729,8 +795,6 @@ function PredictionMarket({
             newOutcome: outcomeId 
           }
         }));
-        setUserVote(outcomeId);
-        toast.success('Vote submitted successfully!');
       } else {
         toast.error(data.message || 'Failed to submit vote');
       }
@@ -742,9 +806,11 @@ function PredictionMarket({
     }
   };
 
-  const getTimeRemaining = (resolutionDateTime: string) => {
-    return formatDistanceToNow(new Date(resolutionDateTime), { addSuffix: true });
+  const isEventEnded = (resolutionDateTime: string) => {
+    return new Date(resolutionDateTime) < new Date();
   };
+
+  const eventEnded = isEventEnded(resolutionDateTime);
 
   return (
     <Card>
@@ -771,61 +837,65 @@ function PredictionMarket({
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-medium">{title}</h3>
               <div className="text-gray-500">
-                {options[0].percentage} chance
+                {leadingOption.percentage} chance
               </div>
             </div>
             <span className="text-sm text-muted-foreground">
-              Ends {getTimeRemaining(resolutionDateTime)}
+              {eventEnded ? "Event has ended" : `Ends ${formatDistanceToNow(new Date(resolutionDateTime), { addSuffix: true })}`}
             </span>
           </div>
 
-          {/* Options with Percentages */}
-          <div className="flex flex-col gap-2">
-            {options.map((option) => (
-              <div key={option.id} className="flex items-center justify-between">
-                <span className="text-sm font-medium">{option.name}</span>
-                <span className="text-sm text-gray-500">
-                  {option.id === 'outcome1' ? value.split(',')[0] : value.split(',')[1]} votes ({option.percentage})
-                </span>
+          {!eventEnded && (
+            <>
+              {/* Options with Percentages */}
+              <div className="flex flex-col gap-2">
+                {options.map((option) => (
+                  <div key={option.id} className="flex items-center justify-between">
+                    <span className="text-sm font-medium">{option.name}</span>
+                    <span className="text-sm text-gray-500">
+                      {option.votes} votes ({option.percentage})
+                    </span>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+
+              {/* Voting Buttons */}
+              <div className="flex gap-2">
+                {localStorage.getItem('token') ? (
+                  <div className="flex flex-wrap gap-2 w-full">
+                    {options.map((option) => (
+                      <Button
+                        key={option.id}
+                        onClick={() => handleVote(option.id)}
+                        className={`flex-1 h-12 ${
+                          userVote === option.id
+                            ? 'bg-green-600 text-white hover:bg-green-700'
+                            : 'bg-green-50 hover:bg-green-100 text-green-800'
+                        }`}
+                        disabled={isVoting}
+                      >
+                        {option.name}
+                      </Button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="w-full text-center p-4 bg-gray-50 rounded-md">
+                    <p className="text-sm text-gray-600">Please login to vote on predictions</p>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
 
           {/* Total Votes */}
           <div className="flex items-center justify-between text-sm text-gray-500">
-            <span>Total: {Number(value.split(',')[0]) + Number(value.split(',')[1])} votes</span>
+            <span>Total: {totalVotes} votes</span>
             <span className="bg-orange-100 rounded-full px-3 py-1 text-orange-700">
-              {options[0].percentage} {options[0].name}
+              {leadingOption.percentage} {leadingOption.name}
             </span>
-          </div>
-
-          {/* Voting Buttons */}
-          <div className="flex gap-2">
-            <Button 
-              onClick={() => handleVote('outcome1')}
-              className={`flex-1 h-12 ${
-                userVote === 'outcome1'
-                  ? 'bg-green-600 text-white hover:bg-green-700'
-                  : 'bg-green-50 hover:bg-green-100 text-green-800'
-              }`}
-              disabled={isVoting}
-            >
-              {options[0].name} ({value.split(',')[0]}) ↑ {userVote === 'outcome1' && '✓'}
-            </Button>
-            <Button 
-              onClick={() => handleVote('outcome2')}
-              className={`flex-1 h-12 ${
-                userVote === 'outcome2'
-                  ? 'bg-red-600 text-white hover:bg-red-700'
-                  : 'bg-red-50 hover:bg-red-100 text-red-800'
-              }`}
-              disabled={isVoting}
-            >
-              {options[1].name} ({value.split(',')[1]}) ↓ {userVote === 'outcome2' && '✓'}
-            </Button>
           </div>
         </div>
       </CardContent>
     </Card>
-  )
+  );
 }

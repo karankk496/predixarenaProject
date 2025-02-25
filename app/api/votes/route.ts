@@ -101,11 +101,11 @@ export async function POST(request: Request) {
       )
     }
 
-    const { eventId, outcome } = await request.json()
+    const { eventId, outcomeIndex } = await request.json()
 
-    if (!eventId || !outcome) {
+    if (!eventId || typeof outcomeIndex !== 'number') {
       return NextResponse.json(
-        { error: "Missing eventId or outcome" },
+        { error: "Missing eventId or invalid outcomeIndex" },
         { status: 400 }
       )
     }
@@ -122,6 +122,14 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: "Event not found or not approved" },
         { status: 404 }
+      )
+    }
+
+    // Validate outcome index
+    if (outcomeIndex < 0 || outcomeIndex >= event.outcomes.length) {
+      return NextResponse.json(
+        { error: "Invalid outcome index" },
+        { status: 400 }
       )
     }
 
@@ -144,46 +152,39 @@ export async function POST(request: Request) {
     let vote;
     if (existingVote) {
       // Update existing vote
+      const currentVotes = [...event.outcomeVotes];
+      currentVotes[parseInt(existingVote.outcomeIndex)]--; // Decrement old vote
+      currentVotes[outcomeIndex]++; // Increment new vote
+
       vote = await prisma.$transaction([
         prisma.vote.update({
           where: { id: existingVote.id },
-          data: { outcome }
+          data: { outcomeIndex }
         }),
-        // Decrement old outcome count
         prisma.event.update({
           where: { id: eventId },
           data: {
-            [existingVote.outcome === 'outcome1' ? 'outcome1Votes' : 'outcome2Votes']: {
-              decrement: 1
-            }
-          }
-        }),
-        // Increment new outcome count
-        prisma.event.update({
-          where: { id: eventId },
-          data: {
-            [outcome === 'outcome1' ? 'outcome1Votes' : 'outcome2Votes']: {
-              increment: 1
-            }
+            outcomeVotes: currentVotes
           }
         })
       ])
     } else {
       // Create new vote
+      const currentVotes = [...event.outcomeVotes];
+      currentVotes[outcomeIndex]++; // Increment new vote
+
       vote = await prisma.$transaction([
         prisma.vote.create({
           data: {
             eventId,
-            outcome,
+            outcomeIndex,
             userId: user.userId as string
           }
         }),
         prisma.event.update({
           where: { id: eventId },
           data: {
-            [outcome === 'outcome1' ? 'outcome1Votes' : 'outcome2Votes']: {
-              increment: 1
-            }
+            outcomeVotes: currentVotes
           }
         })
       ])
@@ -200,8 +201,8 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { 
         success: false,
-        error: "Failed to process vote",
-        details: error instanceof Error ? error.message : "Unknown error"
+        error: "Failed to record vote",
+        details: error instanceof Error ? error.message : 'Unknown error'
       },
       { status: 500 }
     )
