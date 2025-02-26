@@ -14,10 +14,10 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { useRouter } from "next/navigation"
 import { FaGoogle, FaGithub, FaTwitter } from 'react-icons/fa'
 import { signIn } from 'next-auth/react'
-import { toast } from "sonner"
+//import { toast } from "sonner"
 import { Label } from "@/components/ui/label"
 import { Snackbar } from "@mui/material"
-
+import toast, { Toaster } from 'react-hot-toast';
 // Define the login schema
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -95,23 +95,28 @@ export default function LoginPage() {
         localStorage.setItem('userData', JSON.stringify(userData))
         
         // Show success message
-        setSnackbarMessage(`Welcome back${userData.firstName ? `, ${userData.firstName}` : ''}!`)
-        setOpenSnackbar(true)
+       // setSnackbarMessage(` back${userData.firstName ? `, ${userData.firstName}` : ''}!`)
+        toast.success(`Welcome back${userData.firstName ? `, ${userData.firstName}` : ''}!`)
+       // setOpenSnackbar(true)
         
         // Redirect after a short delay to ensure message is shown
         setTimeout(() => {
           router.push('/')
         }, 1000)
       } else {
-        setFormError(data.message || 'Login failed')
-        setSnackbarMessage(data.message || 'Login failed')
-        setOpenSnackbar(true)
+      //  setFormError(data.message || 'Login failed')
+       // setSnackbarMessage(data.message || 'Wrong email or password. PlTry again')
+        toast.error(data.message || 'Wrong email or password. Please, Try again')
+       // setOpenSnackbar(true)
       }
     } catch (error) {
       console.error('Login error:', error)
-      setFormError('An error occurred during login')
-      setSnackbarMessage('An error occurred during login')
-      setOpenSnackbar(true)
+      toast.error('An error occurred during login')
+      //setFormError('An error occurred during login')
+     // setFormError('An error occurred during login')
+     toast.error('An error occurred during login')
+      //setSnackbarMessage('An error occurred during login')
+      //setOpenSnackbar(true)
     } finally {
       setIsSubmitting(false)
     }

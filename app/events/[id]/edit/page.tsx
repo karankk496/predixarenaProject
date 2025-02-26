@@ -279,7 +279,7 @@ export default function EditEventPage({ params }: { params: { id: string } }) {
             ← Back to events list
           </Link>
           <Link href="/" className="text-sm text-primary hover:text-primary/90">
-            Back to main page
+          ← Back to main page
           </Link>
         </CardFooter>
       </Card>

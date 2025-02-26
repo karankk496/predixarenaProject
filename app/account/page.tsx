@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation"
 import { Snackbar } from "@mui/material"
 import { Loader2, ChevronLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import toast, { Toaster } from 'react-hot-toast';
 
 interface UserData {
   id: string
@@ -65,8 +66,9 @@ export default function AccountPage() {
         }
       } catch (error) {
         console.error('Error fetching user data:', error)
-        setSnackbarMessage('Failed to load user data')
-        setOpenSnackbar(true)
+        toast.error('Failed to load user data')
+       // setSnackbarMessage('Failed to load user data')
+//setOpenSnackbar(true)
       } finally {
         setIsLoading(false)
       }

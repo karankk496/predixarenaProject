@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from "@/components/ui/input";
 import { useRouter } from 'next/navigation';
 import { FaGoogle, FaTwitter, FaGithub } from 'react-icons/fa';
-import { toast } from "sonner";
+import toast, { Toaster } from 'react-hot-toast';
 import Link from 'next/link';
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";

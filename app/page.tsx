@@ -16,9 +16,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useRouter } from "next/navigation"
-import { toast } from "sonner"
+//import { toast } from "sonner"
 import { Snackbar } from "@mui/material"
 import { formatDistanceToNow } from "date-fns"
+import toast, { Toaster } from 'react-hot-toast';
 
 interface Event {
   id: string;
@@ -258,8 +259,9 @@ export default function Page() {
       setUserData(null)
       
       // Show success message
-      setSnackbarMessage('You have been successfully logged out!')
-      setOpenSnackbar(true)
+      //setSnackbarMessage('You have been successfully logged out!')
+      toast.success('You have been successfully logged out')
+      //setOpenSnackbar(true)
       
       // Redirect to home after a short delay to ensure message is shown
       setTimeout(() => {
@@ -267,8 +269,9 @@ export default function Page() {
       }, 1500)
     } catch (error) {
       console.error('Logout error:', error)
-      setSnackbarMessage('Error during logout')
-      setOpenSnackbar(true)
+      toast.error('Error during logout')
+      //setSnackbarMessage('Error during logout')
+      //setOpenSnackbar(true)
     }
   };
 

@@ -46,7 +46,7 @@ export default function SignIn() {
         router.push('/');
         router.refresh();
       } else {
-        toast.error(data.error || 'Login failed');
+        toast.error(data.error || 'Wrong email or password');
       }
     } catch (error) {
       console.error('Login error:', error);

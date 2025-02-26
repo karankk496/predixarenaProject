@@ -14,6 +14,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Separator } from "@/components/ui/separator"
+import toast, { Toaster } from 'react-hot-toast';
 
 interface UserData {
   id: string
@@ -47,7 +48,8 @@ export default function ManageUsersPage() {
       const parsedUserData = JSON.parse(userData)
       if (!parsedUserData.isSuperUser) {
         router.push('/')
-        setSnackbarMessage('Access denied: Admin privileges required')
+        //setSnackbarMessage('Access denied: Admin privileges required')
+        toast.error('Access denied: Admin privileges required')
         setOpenSnackbar(true)
         return
       }
@@ -68,8 +70,9 @@ export default function ManageUsersPage() {
         setUsers(data.users)
       } catch (error) {
         console.error('Error fetching users:', error)
-        setSnackbarMessage(error instanceof Error ? error.message : 'Failed to load users')
-        setOpenSnackbar(true)
+        toast.error(error instanceof Error ? error.message : 'Failed to load users')
+      //  setSnackbarMessage(error instanceof Error ? error.message : 'Failed to load users')
+       // setOpenSnackbar(true)
         if (error instanceof Error && error.message === 'Unauthorized') {
           router.push('/')
         }
@@ -108,18 +111,20 @@ export default function ManageUsersPage() {
       })
 
       setUsers(action === 'delete' ? users.filter(user => user.id !== userId) : updatedUsers)
-      setSnackbarMessage(
+      toast.success(
+      
         action === 'promote_admin' 
           ? 'User promoted to Admin successfully' 
           : action === 'promote_ops'
             ? 'User promoted to OPS successfully'
             : 'User deleted successfully'
       )
-      setOpenSnackbar(true)
+     // setOpenSnackbar(true)
     } catch (error) {
       console.error('Error updating user:', error)
-      setSnackbarMessage('Failed to update user')
-      setOpenSnackbar(true)
+      //setSnackbarMessage('Failed to update user')
+      toast.error('Failed to update user')
+   //   setOpenSnackbar(true)
     }
   }
 

@@ -435,7 +435,7 @@ export default function CreateEventPage() {
               router.push('/');
             }}
           >
-            Back to main page
+           ← Back to main page
           </Button>
         </CardFooter>
       </Card>
