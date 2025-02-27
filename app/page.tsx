@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import Link from "next/link"
 import { MoreHorizontal, Search, Settings, User, Globe, LogOut } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
   DropdownMenu,
@@ -83,39 +83,82 @@ export default function Page() {
   ];
 
   // Filter events based on selected category with special handling for Trending and New
-  const filteredEvents = events.filter(event => {
-    if (selectedCategory === "Trending") {
-      return true; // We'll sort these later
+  const filteredEvents = useMemo(() => {
+    console.log('Running filter logic:', {
+      selectedCategory,
+      totalEvents: events.length
+    });
+    
+    if (!events.length) {
+      console.log('No events to filter');
+      return [];
     }
-    if (selectedCategory === "New") {
-      const eventDate = new Date(event.createdAt);
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-      return eventDate >= sevenDaysAgo;
-    }
-    if (selectedCategory === "All") {
+
+    // First filter events based on category
+    const filtered = events.filter(event => {
+      // First check if event is valid and approved
+      if (!event || !event.status || event.status !== 'approved') {
+        return false;
+      }
+
       const now = new Date();
-      const oneDayFromNow = new Date(now);
-      oneDayFromNow.setDate(now.getDate() + 5);
-      const resolutionDate = new Date(event.resolutionDateTime);
-      return resolutionDate <= oneDayFromNow && resolutionDate > now;
-    }
-    return event.category === selectedCategory;
-  }).sort((a, b) => {
-    if (selectedCategory === "Trending") {
-      // Sort by total votes (descending) for Trending category
-      const totalVotesA = a.outcomeVotes.reduce((sum, votes) => sum + votes, 0);
-      const totalVotesB = b.outcomeVotes.reduce((sum, votes) => sum + votes, 0);
-      return totalVotesB - totalVotesA;
-    }
-    if (selectedCategory === "New") {
+      const eventDate = new Date(event.createdAt);
+
+      // For All tab, include all approved events
+      if (selectedCategory === "All") {
+        return true;
+      }
+
+      // For Trending, only include last 24 hours
+      if (selectedCategory === "Trending") {
+        const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        return eventDate >= twentyFourHoursAgo;
+      }
+      
+      // For New, include last 7 days
+      if (selectedCategory === "New") {
+        const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        return eventDate >= sevenDaysAgo;
+      }
+      
+      // For other categories, match the category name
+      return event.category.toLowerCase() === selectedCategory.toLowerCase();
+    });
+
+    // Then sort the filtered events
+    return filtered.sort((a, b) => {
+      // Calculate total votes for both events
+      const votesA = a.outcomeVotes.reduce((sum, v) => sum + v, 0);
+      const votesB = b.outcomeVotes.reduce((sum, v) => sum + v, 0);
+
+      // For All and Trending, sort primarily by votes
+      if (selectedCategory === "All" || selectedCategory === "Trending") {
+        if (votesB !== votesA) {
+          return votesB - votesA; // Higher votes first
+        }
+        // If votes are equal, sort by date
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      }
+      
+      // For all other categories, sort by date
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+  }, [events, selectedCategory]);
+
+  // Log filtered events for debugging
+  useEffect(() => {
+    if (filteredEvents.length > 0) {
+      console.log('Filtered events:', {
+        category: selectedCategory,
+        count: filteredEvents.length,
+        events: filteredEvents.map(e => ({
+          title: e.title,
+          votes: e.outcomeVotes.reduce((sum, v) => sum + v, 0),
+          date: new Date(e.createdAt).toLocaleString()
+        }))
+      });
     }
-    if (selectedCategory === "All") {
-      return new Date(a.resolutionDateTime).getTime() - new Date(b.resolutionDateTime).getTime();
-    }
-    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-  });
+  }, [filteredEvents, selectedCategory]);
 
   const updateEventVotes = (eventId: string, oldOutcome: string | null, newOutcome: string) => {
     setEvents(currentEvents => 
@@ -424,54 +467,57 @@ export default function Page() {
       <div className="container py-6 grid grid-cols-[240px,1fr] gap-6">
         {/* Sidebar */}
         <aside className="space-y-2">
-          <Link 
-            href="/events/create" 
-            className="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-muted text-muted-foreground"
-          >
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path
-                d="M10 4V16M4 10H16"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-            CREATE NEW EVENT
-          </Link>
+        {userData && (
+              <>
+                <Link 
+                  href="/events/create" 
+                  className="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-muted text-muted-foreground"
+                >
+                  <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path
+                      d="M10 4V16M4 10H16"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                  EVENT
+                </Link>
 
-          <Link 
-            href="/events" 
-            className="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-muted text-muted-foreground"
-          >
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path
-                d="M2 4H18M2 8H18M2 12H18M2 16H18"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-            VIEW MY EVENTS
-          </Link>
+                <Link 
+                  href="/events" 
+                  className="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-muted text-muted-foreground"
+                >
+                  <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path
+                      d="M2 4H18M2 8H18M2 12H18M2 16H18"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                  VIEW 
+                </Link>
 
-          <Link 
-            href="/vote" 
-            className="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-muted text-muted-foreground"
-          >
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path
-                d="M10 2L12 7H18L14 11L16 17L10 13L4 17L6 11L2 7H8L10 2Z"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-            VOTE ON PREDICTIONS
-          </Link>
-
+                <Link 
+                  href="/vote" 
+                  className="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-muted text-muted-foreground"
+                >
+                  <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path
+                      d="M10 2L12 7H18L14 11L16 17L10 13L4 17L6 11L2 7H8L10 2Z"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                  VOTE
+                </Link>
+              </>
+            )}
           {/* {userData?.role === 'admin' && (
             <Link 
               href="/approve" 
@@ -514,62 +560,27 @@ export default function Page() {
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path
                 d="M5.5 9.5L2.5 12.5V17.5H7.5L10.5 14.5"
-                stroke="#FFA500"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <path
-                d="M14.5 10.5L17.5 7.5V2.5H12.5L9.5 5.5"
-                stroke="#FFA500"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <path
-                d="M7.5 7.5L12.5 12.5"
-                stroke="#FFA500"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <path
-                d="M12.5 7.5L7.5 12.5"
-                stroke="#FFA500"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-            LEADERBOARDS
-          </Link>
-          
-
-          <Link href="#" className="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-muted text-muted-foreground">
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path
-                d="M16.5 10C16.5 13.5899 13.5899 16.5 10 16.5C6.41015 16.5 3.5 13.5899 3.5 10C3.5 6.41015 6.41015 3.5 10 3.5C13.5899 3.5 16.5 6.41015 16.5 10Z"
-                stroke="#FF69B4"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <path d="M10 7.5V12.5" stroke="#FF69B4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M7.5 10H12.5" stroke="#FF69B4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            QUESTS
-          </Link>
-          <Link href="#" className="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-muted text-muted-foreground">
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path
-                d="M4 9V7C4 4.79086 5.79086 3 8 3H12C14.2091 3 16 4.79086 16 7V9"
                 stroke="#4CAF50"
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
               <path
-                d="M16 9H4C2.89543 9 2 9.89543 2 11V16C2 17.1046 2.89543 18 4 18H16C17.1046 18 18 17.1046 18 16V11C18 9.89543 17.1046 9 16 9Z"
+                d="M14.5 10.5L17.5 7.5V2.5H12.5L9.5 5.5"
+                stroke="#4CAF50"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M7.5 7.5L12.5 12.5"
+                stroke="#4CAF50"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M12.5 7.5L7.5 12.5"
                 stroke="#4CAF50"
                 strokeWidth="2"
                 strokeLinecap="round"
@@ -581,19 +592,14 @@ export default function Page() {
           <Link href="#" className="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-muted text-muted-foreground">
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path
-                d="M16.5 17.5V15.8333C16.5 14.9493 16.1488 14.1014 15.5237 13.4763C14.8986 12.8512 14.0507 12.5 13.1667 12.5H6.83333C5.94928 12.5 5.10143 12.8512 4.47631 13.4763C3.85119 14.1014 3.5 14.9493 3.5 15.8333V17.5"
+                d="M16.5 10C16.5 13.5899 13.5899 16.5 10 16.5C6.41015 16.5 3.5 13.5899 3.5 10C3.5 6.41015 6.41015 3.5 10 3.5C13.5899 3.5 16.5 6.41015 16.5 10Z"
                 stroke="#9C27B0"
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
-              <path
-                d="M10 9.16667C11.841 9.16667 13.3333 7.67428 13.3333 5.83333C13.3333 3.99238 11.841 2.5 10 2.5C8.15905 2.5 6.66667 3.99238 6.66667 5.83333C6.66667 7.67428 8.15905 9.16667 10 9.16667Z"
-                stroke="#9C27B0"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
+              <path d="M10 7.5V12.5" stroke="#9C27B0" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M7.5 10H12.5" stroke="#9C27B0" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
             PROFILE
           </Link>
